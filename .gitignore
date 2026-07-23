@@ -1,0 +1,44 @@
+# Build folders
+bin/
+obj/
+out/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Logs
+*.log
+logs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Publish profiles
+Properties/PublishProfiles/
+
+# Environment files
+appsettings.Development.json
+appsettings.Local.json
+
+# Secrets
+secrets.json
+*.pfx
+*.snk
+
+# NuGet
+*.nupkg
+packages/
+
+# Test results
+TestResults/
+
+# Temporary files
+*.tmp
+*.temp
+*.cache

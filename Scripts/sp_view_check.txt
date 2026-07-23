@@ -1,0 +1,4 @@
+Msg 207, Level 16, State 1, Server srv1358182, Line 1
+Invalid column name 'definition'.
+Msg 207, Level 16, State 1, Server srv1358182, Line 1
+Invalid column name 'definition'.

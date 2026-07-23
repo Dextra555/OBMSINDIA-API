@@ -1,0 +1,24 @@
+Msg 911, Level 16, State 1, Server srv1358182, Line 5
+Database 'OBMS' does not exist. Make sure that the name is entered correctly.
+============================================
+Adding CB Columns to Employee Table
+============================================
+ 
+✓ Column CB_Basic already exists
+✓ Column CB_DA already exists
+✓ Column CB_HRA already exists
+✓ Column CB_HRAPercentage already exists
+✓ Column CB_OtherAllowances already exists
+✓ Column CB_NH already exists
+✓ Column CB_NHPercentage already exists
+✓ Column CB_SubTotal already exists
+ 
+============================================
+All CB columns added/verified successfully
+============================================
+ 
+Next steps:
+1. Restart the API application
+2. Test employee creation with Commercial Breakdown
+3. Verify data is saved and retrieved correctly
+============================================
