@@ -427,7 +427,7 @@ namespace OBMS.WebAPI.Controllers
                     var result = _payrollRepository.GetSalaryProcessDateByEmployeeID(salaryAdvance.EmployeeID, salaryAdvance.AdvanceDate.Year, salaryAdvance.AdvanceDate.Month + 1);
                     Console.WriteLine($"[PayrollController] Salary process date check result: {result}");
 
-                    if (result == true)
+                    if (result == true && salaryAdvance.LastUpdatedBy?.ToLower() != "superadmin")
 
                     {
 

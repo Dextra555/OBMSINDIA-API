@@ -599,16 +599,18 @@ namespace OBMS.WebAPI.BusinessObjects
                                                                 if (drAttendance.GetDecimal(drAttendance.GetOrdinal("NormalDays")) >= 26)
                                                                 {
                                                                     BasicSalary = (decimal)drEmployee.GetDouble(drEmployee.GetOrdinal("EMPPAY_BASIC_RATE"));
-                                                                    BasicSalaryDays = (decimal)drEmployee.GetDecimal(drEmployee.GetOrdinal("WorkingDays"));
-                                                                    AllowanceDays = (decimal)drEmployee.GetDecimal(drEmployee.GetOrdinal("WorkingDays"));
+                                                                    // Use actual NormalDays instead of WorkingDays to get exact day count
+                                                                    BasicSalaryDays = (decimal)drAttendance.GetDecimal(drAttendance.GetOrdinal("NormalDays"));
+                                                                    AllowanceDays = (decimal)drAttendance.GetDecimal(drAttendance.GetOrdinal("NormalDays"));
                                                                 }
                                                                 else
                                                                 {
                                                                     if (Period.Month == 2 && drAttendance.GetDecimal(drAttendance.GetOrdinal("NormalDays")) >= 24) //NormalHours --> NormalDays
                                                                     {
                                                                         BasicSalary = (decimal)drEmployee.GetDouble(drEmployee.GetOrdinal("EMPPAY_BASIC_RATE"));
-                                                                        BasicSalaryDays = (decimal)drEmployee.GetDecimal(drEmployee.GetOrdinal("WorkingDays"));
-                                                                        AllowanceDays = (decimal)drEmployee.GetDecimal(drEmployee.GetOrdinal("WorkingDays"));
+                                                                        // Use actual NormalDays instead of WorkingDays to get exact day count
+                                                                        BasicSalaryDays = (decimal)drAttendance.GetDecimal(drAttendance.GetOrdinal("NormalDays"));
+                                                                        AllowanceDays = (decimal)drAttendance.GetDecimal(drAttendance.GetOrdinal("NormalDays"));
                                                                     }
                                                                     else
                                                                     {
@@ -622,6 +624,12 @@ namespace OBMS.WebAPI.BusinessObjects
                                                                 OverTimeSalary += (decimal)drAttendance.GetDecimal(drAttendance.GetOrdinal("OTHours")) * Math.Round(drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayOTRate")) * (drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayRate")) / drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayHours"))), 2);
                                                                 OverTimeSalaryHours += drAttendance.GetDecimal(drAttendance.GetOrdinal("OTHours"));
                                                                 OverTimeSalaryRate = Math.Round(drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayOTRate")) * (drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayRate")) / drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayHours"))), 2);
+                                                                break;
+
+                                                            case 2: // Off Day (rest day, not worked — counted for BasicSalaryDays)
+                                                                // Track off days in AllowanceDays only — NOT in BasicSalaryDays
+                                                                // BasicSalaryDays will add them back after hours-based recalculation
+                                                                AllowanceDays += (decimal)drAttendance.GetDecimal(drAttendance.GetOrdinal("NormalDays"));
                                                                 break;
 
                                                             case 3: // off day working
@@ -1093,8 +1101,9 @@ namespace OBMS.WebAPI.BusinessObjects
                                                                             else
                                                                             {
                                                                                 BasicSalary += (decimal)drAttendance.GetDecimal(drAttendance.GetOrdinal("NormalHours")) * (drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayRate")) / drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayHours")));
-                                                                                BasicSalaryDays += ((decimal)drAttendance.GetDecimal(drAttendance.GetOrdinal("NormalHours")) * (drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayRate")) / drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayHours")))) / drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayRate"));
-                                                                                AllowanceDays += ((decimal)drAttendance.GetDecimal(drAttendance.GetOrdinal("NormalHours")) * (drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayRate")) / drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayHours")))) / drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayRate"));
+                                                                                // Use NormalDays (actual days attended) instead of hours-based formula to avoid decimal days like 27.63
+                                                                                BasicSalaryDays += (decimal)drAttendance.GetDecimal(drAttendance.GetOrdinal("NormalDays"));
+                                                                                AllowanceDays += (decimal)drAttendance.GetDecimal(drAttendance.GetOrdinal("NormalDays"));
                                                                                 BasicSalaryRate = drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayRate"));
 
 
@@ -1122,11 +1131,13 @@ namespace OBMS.WebAPI.BusinessObjects
                                                                 }
 
                                                                 break;
-                                                            case 2:// off day
+                                                            case 2:// off day (week-off / rest day — no deduction, counted in BasicSalaryDays)
                                                                 if (EmployeeType == "Guard" && drEmployee.GetBoolean(drEmployee.GetOrdinal("NonStructure")) == true)
                                                                 {
                                                                     WorkingDay = WorkingDay + (decimal)drAttendance.GetDecimal(drAttendance.GetOrdinal("NormalDays"));
                                                                 }
+                                                                // Off days are week-offs — add to BasicSalaryDays so no salary deduction
+                                                                BasicSalaryDays += (decimal)drAttendance.GetDecimal(drAttendance.GetOrdinal("NormalDays"));
                                                                 break;
 
                                                             case 3:// off day working
@@ -2288,10 +2299,16 @@ namespace OBMS.WebAPI.BusinessObjects
 
                                             if (EmployeeType == "Staff")
                                             {
+                                                // Off days (week-off/rest days) are tracked in AllowanceDays but NOT in BasicSalaryDays
+                                                // OffDaysCount = difference between AllowanceDays and BasicSalaryDays
+                                                decimal OffDaysCount = AllowanceDays - BasicSalaryDays;
+                                                // BasicSalaryDays already excludes off days — use as-is for hours recalculation
+                                                decimal BasicSalaryDaysWithoutOffDays = BasicSalaryDays;
+
                                                 if (MPMbool)
                                                 {
                                                     //Default basic salary Day to 26 if hours > 188(All month) or 176(Feb)
-                                                    BasicSalaryDays = BasicSalaryDays + AnnualLeaveDay + MedicalLeaveDay + PaternityLeaveDay + MaternityLeaveDay + HolidaySalaryDays + HolidayDays + UnPaidLeaveDay + AbsentDay + HospitalizationLeaveDay + SocsoDay;
+                                                    BasicSalaryDays = BasicSalaryDaysWithoutOffDays + AnnualLeaveDay + MedicalLeaveDay + PaternityLeaveDay + MaternityLeaveDay + HolidaySalaryDays + HolidayDays + UnPaidLeaveDay + AbsentDay + HospitalizationLeaveDay + SocsoDay;
                                                     AllowanceDays = BasicSalaryDays;
 
                                                     //BasicSalaryDays = BasicSalaryDays - UnPaidLeaveDay - AbsentDay;
@@ -2419,21 +2436,21 @@ namespace OBMS.WebAPI.BusinessObjects
                                                     }
                                                     else
                                                     {
-                                                        //ReAllowanceDays = AllowanceDays - UnPaidLeaveDay - AbsentDay - MedicalLeaveDay - PaternityLeaveDay - MaternityLeaveDay;
-                                                        //dReAllowance = (AllowanceDays - UnPaidLeaveDay - AbsentDay - MedicalLeaveDay - PaternityLeaveDay - MaternityLeaveDay) * dReAllowance;
                                                         ReAllowanceDays = AllowanceDays - UnPaidLeaveDay - AbsentDay;
                                                         dReAllowance = (AllowanceDays - UnPaidLeaveDay - AbsentDay) * dReAllowance;
                                                         dReAllowance = Math.Round(dReAllowance, 1);
                                                     }
 
                                                     //Default basic salary Day to 26 if hours > 188(All month) or 176(Feb)
-                                                    BasicSalaryDays = BasicSalaryDays + AnnualLeaveDay + MedicalLeaveDay + PaternityLeaveDay + MaternityLeaveDay + HolidaySalaryDays + HolidayDays + UnPaidLeaveDay + AbsentDay + SocsoDay + HospitalizationLeaveDay;
+                                                    // Exclude off days from hours-based recalculation (off days have 0 hours, not 8)
+                                                    BasicSalaryDays = BasicSalaryDaysWithoutOffDays + AnnualLeaveDay + MedicalLeaveDay + PaternityLeaveDay + MaternityLeaveDay + HolidaySalaryDays + HolidayDays + UnPaidLeaveDay + AbsentDay + SocsoDay + HospitalizationLeaveDay;
                                                     BasicSalaryDays = BasicSalaryDays * 8;
 
                                                     if (BasicSalaryDays >= 188)
                                                     {
-                                                        BasicSalaryDays = 26;
-                                                        AllowanceDays = 26;
+                                                        // Full month — use actual NormalDays from attendance (stored in BasicSalaryDaysWithoutOffDays)
+                                                        BasicSalaryDays = BasicSalaryDaysWithoutOffDays;
+                                                        AllowanceDays = BasicSalaryDaysWithoutOffDays;
                                                         //BasicSalaryDays = BasicSalaryDays - UnPaidLeaveDay - AbsentDay;
                                                     }
                                                     else
@@ -2508,7 +2525,9 @@ namespace OBMS.WebAPI.BusinessObjects
                                                     }
 
                                                     BasicSalaryDays = BasicSalaryDays - UnPaidLeaveDay - AbsentDay - SocsoDay;
-                                                    BasicSalary = BasicSalaryDays * (drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayRate")));
+                                                    // Add back off days (week-offs) — they are not hours-based, no deduction needed
+                                                    BasicSalaryDays = BasicSalaryDays + OffDaysCount;
+                                                    BasicSalary = (BasicSalaryDays - OffDaysCount) * (drEmployee.GetDecimal(drEmployee.GetOrdinal("GeneralDayRate")));
                                                 }
                                             }
                                             else
