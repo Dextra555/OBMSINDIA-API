@@ -10,7 +10,7 @@ namespace OBMS.WebAPI.Repositories.Interface
         Task<Dictionary<string, string>> GetEmployeeNo();
         Task<Dictionary<string, Object>> GetEmployeeMasterList(string userID);
         Task<List<Object>> GetClientsFromBranchId(string branchId);
-        Task<Employee> saveAndUpdateEmployee(Employee employee, EmploymentDetails employment, EmployeeSalaryDetails salaryDetails);
+        Task<Employee> saveAndUpdateEmployee(Employee employee, EmploymentDetails employment, EmployeeSalaryDetails salaryDetails, bool isBranchChanged = false, DateTime? branchStartDate = null);
         Task<Employee> UpdateEmployeeTransfer(EmployeeTransferDto employeeTransferDto);
         Task<Dictionary<string, Object>> GetEmployeeById(int employeeId);
         Task<Object> CheckEmployeeInfo(string from,string data);

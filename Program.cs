@@ -52,6 +52,7 @@ builder.Services.AddScoped<IFinanceRepository, FinanceRepository>();
 builder.Services.AddScoped<ISalaryProcess, SalaryProcess>();
 builder.Services.AddScoped<IAccountingRepository, AccountingRepository>();
 builder.Services.AddScoped<IQuotationRepository, QuotationRepository>();
+builder.Services.AddScoped<ICreditDebitNoteRepository, CreditDebitNoteRepository>();
 
 // Add Indian Payroll Calculation Services
 builder.Services.AddScoped<IPFCalculationService, PFCalculationService>();

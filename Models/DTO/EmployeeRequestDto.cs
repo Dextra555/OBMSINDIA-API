@@ -303,6 +303,17 @@ namespace OBMS.WebAPI.Models.DTO
         public decimal? CB_AdvanceStatutoryBonusPercentage { get; set; }
         public decimal? CB_SubTotal { get; set; }
 
+        // ── Branch Transfer fields ──────────────────────────────────────
+        /// <summary>True when the user changed the branch in edit mode.</summary>
+        public bool IsBranchChanged { get; set; }
+
+        /// <summary>
+        /// Effective start date at the new branch.
+        /// Required when IsBranchChanged = true.
+        /// Stored as Emp_StartDate on the new EmployeeHistory row.
+        /// </summary>
+        public DateTime? BranchStartDate { get; set; }
+
     }
 
 }
