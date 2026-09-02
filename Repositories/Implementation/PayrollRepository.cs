@@ -3287,7 +3287,15 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
             var remarks = _oBMSDbContext.SalaryProcess
 
-                 .Where(sp => sp.Period <= period && sp.Branch == branchCode && sp.EmployeeType == employeeType)
+                 .Where(sp => sp.Period.Year == period.Year
+
+                           && sp.Period.Month == period.Month
+
+                           && sp.Branch == branchCode
+
+                           && sp.EmployeeType == employeeType)
+
+                 .OrderByDescending(sp => sp.LastUpdate)
 
                  .Select(sp => sp.Remarks)
 

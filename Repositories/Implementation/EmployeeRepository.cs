@@ -556,9 +556,10 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
 
 
-        public async Task<Employee> saveAndUpdateEmployee(Employee employee, EmploymentDetails employment, EmployeeSalaryDetails salaryDetails)
+        public async Task<Employee> saveAndUpdateEmployee(Employee employee, EmploymentDetails employment, EmployeeSalaryDetails salaryDetails, bool isBranchChanged = false, DateTime? branchStartDate = null)
 
         {
+            bool isNewEmployee = employee.EMP_ID == 0;
 
             // DEBUG: Log CB values in repository - Simplified
 
@@ -590,7 +591,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
 
 
-            if (employee.EMP_ID == 0)
+            if (isNewEmployee)
 
             {
 
@@ -638,37 +639,47 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
             }
 
-            //return employee;
-
-
-
-
-
-
-
             employment.EMPPAY_CODE = employee.EMP_CODE;
-
-
 
             var _employment = await saveAndUpdateEmploymentDetails(employment);
 
-
-
-
-
             salaryDetails.EMPFL_CODE = employee.EMP_CODE;
-
-
 
             var _salaryDetails = await saveAndUpdateEmployeeSalaryDetails(salaryDetails);
 
+            // ── History logic ─────────────────────────────────────────────────
+            if (isNewEmployee)
+            {
+                // NEW EMPLOYEE: write initial EmployeeHistory row
+                DateTime startDate = employment.EMPPAY_DATE_JOINED.Date;
+                await InsertEmployeeHistoryRow(employee, employment, salaryDetails,
+                    empStartDate: startDate,
+                    empEndDate: null);
+            }
+            else if (isBranchChanged && branchStartDate.HasValue)
+            {
+                // BRANCH CHANGE: close the previous open history row and open a new one
+                DateTime newStartDate = branchStartDate.Value.Date;
+                DateTime prevEndDate  = newStartDate.AddDays(-1);
 
+                var openHistory = await _oBMSDbContext.EmployeeHistories
+                    .Where(h => h.EMP_ID == employee.EMP_ID && h.Emp_EndDate == null)
+                    .OrderByDescending(h => h.EMP_HISTORY_ID)
+                    .FirstOrDefaultAsync();
+
+                if (openHistory != null)
+                {
+                    openHistory.Emp_EndDate = prevEndDate;
+                    _oBMSDbContext.EmployeeHistories.Update(openHistory);
+                    await _oBMSDbContext.SaveChangesAsync();
+                }
+
+                await InsertEmployeeHistoryRow(employee, employment, salaryDetails,
+                    empStartDate: newStartDate,
+                    empEndDate: null);
+            }
 
             return employee;
-
-
-
-            throw new NotImplementedException();
 
         }
 
@@ -740,6 +751,101 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
         }
 
+        // ─────────────────────────────────────────────────────────────────────────
+        // Private history insertion helper
+        // ─────────────────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Inserts a single row into EmployeeHistory as a combined snapshot.
+        /// Emp_StartDate marks the start of service at this branch;
+        /// Emp_EndDate = null means the row is currently active.
+        /// </summary>
+        private async Task InsertEmployeeHistoryRow(
+            Employee employee,
+            EmploymentDetails employment,
+            EmployeeSalaryDetails salaryDetails,
+            DateTime empStartDate,
+            DateTime? empEndDate)
+        {
+            var historyRow = new EmployeeHistory
+            {
+                EMP_ID                      = employee.EMP_ID,
+                EMP_ROLE                    = employee.EMP_ROLE,
+                EMP_CODE                    = employee.EMP_CODE,
+                EMP_NAME                    = employee.EMP_NAME,
+                EMP_ADDRESS1                = employee.EMP_ADDRESS1 ?? "",
+                EMP_ADDRESS2                = employee.EMP_ADDRESS2 ?? "",
+                EMP_POST_CODE               = employee.EMP_POST_CODE ?? "",
+                EMP_TOWN                    = employee.EMP_TOWN ?? "",
+                EMP_STATE                   = employee.EMP_STATE ?? "",
+                EMP_NATIONAL                = employee.EMP_NATIONAL ?? "",
+                EMP_PHONE                   = employee.EMP_PHONE ?? "",
+                EMP_HGH_EDU                 = employee.EMP_HGH_EDU ?? "",
+                EM_WORK_EXP                 = employee.EM_WORK_EXP ?? "",
+                EMP_DATE_OF_BIRTH           = employee.EMP_DATE_OF_BIRTH,
+                EMP_IC_OLD                  = employee.EMP_IC_OLD ?? "",
+                EMP_IC_NEW                  = employee.EMP_IC_NEW ?? "",
+                EMP_IC_COLOR                = employee.EMP_IC_COLOR ?? "",
+                EMP_PASSPORT_NO             = employee.EMP_PASSPORT_NO ?? "",
+                EMP_SEX                     = employee.EMP_SEX ?? "",
+                EMP_RACE                    = employee.EMP_RACE ?? "",
+                EMP_MARTIAL_STATUS          = employee.EMP_MARTIAL_STATUS ?? "",
+                EMP_SPOUSE_NAME             = employee.EMP_SPOUSE_NAME ?? "",
+                EMP_SP_IC                   = employee.EMP_SP_IC ?? "",
+                EMP_NO_CHILD                = employee.EMP_NO_CHILD,
+                EMP_SP_WORK                 = employee.EMP_SP_WORK,
+                EMP_PER_NAME_CONTACT        = employee.EMP_PER_NAME_CONTACT ?? "",
+                EMP_CONTACT_ADDRESS1        = employee.EMP_CONTACT_ADDRESS1 ?? "",
+                EMP_CONTACT_ADDRESS2        = employee.EMP_CONTACT_ADDRESS2 ?? "",
+                EMP_CONTACT_POST_CODE       = employee.EMP_CONTACT_POST_CODE ?? "",
+                EMP_CONTACT_TOWN            = employee.EMP_CONTACT_TOWN ?? "",
+                EMP_CONTACT_STATE           = employee.EMP_CONTACT_STATE ?? "",
+                EMP_CONTACT_TELEPHONE       = employee.EMP_CONTACT_TELEPHONE ?? "",
+                EMP_BRANCH_CODE             = employee.EMP_BRANCH_CODE ?? "",
+                OldBranch                   = employee.OldBranch,
+                TransferDate                = employee.TransferDate,
+                HasTransfered               = employee.HasTransfered,
+                EMP_MOBILEPHONE             = employee.EMP_MOBILEPHONE ?? "",
+                EMP_CITIZEN                 = employee.EMP_CITIZEN,
+                EMP_CHECKLIST               = employee.EMP_CHECKLIST,
+                EMP_CLIENT                  = employee.EMP_CLIENT ?? "",
+                KDNVetting                  = employee.KDNVetting,
+                NewSalaryStructure          = employee.NewSalaryStructure,
+                SalaryStructure1000_3h      = employee.SalaryStructure1000_3h,
+                EMPPAY_JOB_TITLE            = employment.EMPPAY_JOB_TITLE ?? "",
+                EMPPAY_CATEGORY             = employment.EMPPAY_CATEGORY ?? "",
+                EMPPAY_DATE_JOINED          = employment.EMPPAY_DATE_JOINED,
+                EMPPAY_DATE_CONFIRM         = employment.EMPPAY_DATE_CONFIRM,
+                EMPPAY_DATE_PROMOTION       = employment.EMPPAY_DATE_PROMOTION,
+                EMPPAY_DATE_RESIGNED        = employment.EMPPAY_DATE_RESIGNED,
+                EMPPAY_BASIC_RATE           = employment.EMPPAY_BASIC_RATE,
+                SALARYLAB                   = employment.SALARYLAB,
+                ATTENDANCEALLOWANCE         = employment.ATTENDANCEALLOWANCE,
+                NewStructureATTENDANCEALLOWANCE = employment.NewStructureATTENDANCEALLOWANCE,
+                SpecialAllowance            = employment.SpecialAllowance,
+                AttendanceAllowanceWorkingDays = employment.AttendanceAllowanceWorkingDays,
+                AttendanceAllowanceFollowCalendar = employment.AttendanceAllowanceFollowCalendar,
+                EMPFL_BANK                  = salaryDetails?.EMPFL_BANK,
+                EMPFL_BK_ACCNO              = salaryDetails?.EMPFL_BK_ACCNO,
+                EMPFL_TAX_NO                = salaryDetails?.EMPFL_TAX_NO,
+                EMPFL_EPFNO                 = salaryDetails?.EMPFL_EPFNO,
+                EMPFL_EPF8Pa                = salaryDetails?.EMPFL_EPF8Pa,
+                EMPFL_SOSCO_NO              = salaryDetails?.EMPFL_SOSCO_NO,
+                EPFDETECT                   = salaryDetails?.EPFDETECT ?? false,
+                PAYMODE                     = salaryDetails?.PAYMODE ?? "Bank",
+                SOCSODETECT                 = salaryDetails?.SOCSODETECT ?? false,
+                TMPGUARD                    = salaryDetails?.TMPGUARD ?? false,
+                DETECTBYND55                = salaryDetails?.DETECTBYND55 ?? false,
+                INCOMETAXDETECT             = salaryDetails?.INCOMETAXDETECT,
+                LASTUPDATE                  = employee.LASTUPDATE,
+                LastUpdatedBy               = employee.LastUpdatedBy ?? "admin",
+                Emp_StartDate               = empStartDate,
+                Emp_EndDate                 = empEndDate
+            };
+
+            _oBMSDbContext.EmployeeHistories.Add(historyRow);
+            await _oBMSDbContext.SaveChangesAsync();
+        }
 
 
         public async Task<Employee> UpdateEmployeeTransfer(EmployeeTransferDto employeeTransferDto)
@@ -805,6 +911,19 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
 
             await _oBMSDbContext.SaveChangesAsync();
+
+            // Close the currently open EmployeeHistory row before inserting the new one
+            var openHistory = await _oBMSDbContext.EmployeeHistories
+                .Where(h => h.EMP_ID == employee.EMP_ID && h.Emp_EndDate == null)
+                .OrderByDescending(h => h.EMP_HISTORY_ID)
+                .FirstOrDefaultAsync();
+
+            if (openHistory != null)
+            {
+                openHistory.Emp_EndDate = employeeTransferDto.TRANSFER_DATE.AddDays(-1);
+                _oBMSDbContext.EmployeeHistories.Update(openHistory);
+                await _oBMSDbContext.SaveChangesAsync();
+            }
 
             var employeeHistory = new EmployeeHistory()
 
@@ -956,7 +1075,9 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                 INCOMETAXDETECT = salaryDetails?.INCOMETAXDETECT,
 
-
+                // Set Emp_StartDate to the transfer date so this row has a valid period start
+                Emp_StartDate   = employeeTransferDto.TRANSFER_DATE,
+                Emp_EndDate     = null
 
             };
 

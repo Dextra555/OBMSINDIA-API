@@ -623,7 +623,31 @@ namespace OBMS.WebAPI.Controllers
                 Console.WriteLine($"EMP_ID: {employee.EMP_ID}");
                 Console.WriteLine("=========================================");
 
-                await _employeeRepository.saveAndUpdateEmployee(employee, employment, salaryDetails);
+                // ── Branch change validation ─────────────────────────────────
+                if (employeeRequestDto.IsBranchChanged && !employeeRequestDto.BranchStartDate.HasValue)
+                {
+                    dictResult.Add("Success", "Warning");
+                    dictResult.Add("Message", "Please provide the Effective Start Date for the new branch.");
+                    return Ok(dictResult);
+                }
+
+                // When branch has changed, keep the transfer-tracking fields on the Employee row
+                if (employeeRequestDto.IsBranchChanged && employeeRequestDto.EMP_ID != 0)
+                {
+                    var existingEmployee = _oBMSDbContext.Employees
+                        .Where(x => x.EMP_ID == employeeRequestDto.EMP_ID)
+                        .Select(x => x.EMP_BRANCH_CODE)
+                        .FirstOrDefault();
+
+                    employee.OldBranch      = existingEmployee ?? "";
+                    employee.TransferDate   = employeeRequestDto.BranchStartDate;
+                    employee.HasTransfered  = true;
+                }
+
+                await _employeeRepository.saveAndUpdateEmployee(
+                    employee, employment, salaryDetails,
+                    isBranchChanged: employeeRequestDto.IsBranchChanged,
+                    branchStartDate: employeeRequestDto.BranchStartDate);
 
                 // DEBUG: Log after save
                 Console.WriteLine("=== AFTER SAVE OPERATION ===");
