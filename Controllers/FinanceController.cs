@@ -872,7 +872,10 @@ namespace OBMS.WebAPI.Controllers
 
                     decimal displayedQty = (decimal)d.NoOfGuards;
 
-                    decimal displayedRate = (decimal)((double)d.MonthTotal / (double)displayedQty);
+                    // Guard against division by zero (Lump Sum has NoOfGuards = 0)
+                    decimal displayedRate = displayedQty > 0
+                        ? Math.Round((decimal)d.MonthTotal / displayedQty, 2)
+                        : (decimal)d.MonthTotal;
 
 
 
@@ -1453,13 +1456,12 @@ namespace OBMS.WebAPI.Controllers
                     var adjustedAmount = ratePerDay * adjustedDays;
 
                     // Use discounted rate (adjusted amount divided by quantity) instead of original rate
-
-                    decimal displayedRate = adjustedAmount / displayedQty;
-
-
+                    // Guard against division by zero (Lump Sum has NoOfGuards = 0)
+                    decimal displayedRate = displayedQty > 0
+                        ? Math.Round(adjustedAmount / displayedQty, 2)
+                        : adjustedAmount;
 
                     // Calculate tax for each row using stored TaxAmount from AgreementDetails
-
                     decimal rowTax = d.IsTaxable ? (decimal)d.TaxAmount : 0;
 
 
@@ -1942,7 +1944,10 @@ namespace OBMS.WebAPI.Controllers
                     var adjustedAmount = ratePerDay * adjustedDays;
 
                     // Use discounted rate (adjusted amount divided by quantity) instead of original rate
-                    decimal displayedRate = adjustedAmount / displayedQty;
+                    // Guard against division by zero (Lump Sum has NoOfGuards = 0)
+                    decimal displayedRate = displayedQty > 0
+                        ? Math.Round(adjustedAmount / displayedQty, 2)
+                        : adjustedAmount;
 
 
 

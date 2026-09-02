@@ -31,7 +31,10 @@ namespace OBMS.WebAPI.Models.DTO
         public string? Unit { get; set; }
         public string? Designation { get; set; }
         public Dictionary<int, string> DailyAttendanceCodes { get; set; } = new Dictionary<int, string>();
-        
+
+        /// <summary>Client code for custom attendance period resolution. Auto-populated from EMP_CLIENT if not provided.</summary>
+        public string? ClientCode { get; set; }
+
         // Summary fields (calculated from daily codes)
         public int Duty { get; set; } = 0;
         public int WeeklyOff { get; set; } = 0;

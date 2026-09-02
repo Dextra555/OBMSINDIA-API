@@ -760,7 +760,7 @@ namespace OBMS.WebAPI.Services
                 EmployeeCode = simplifiedDto.EmployeeCode,
                 EmployeeName = simplifiedDto.EmployeeName,
                 BranchCode = simplifiedDto.BranchCode,
-                Period = simplifiedDto.Period, // Should already be standardized
+                Period = simplifiedDto.Period,
                 Shift2Type = simplifiedDto.Shift2Type,
                 Shift2Rate = simplifiedDto.Shift2Rate,
                 AllowanceDeduction = simplifiedDto.AllowanceDeduction,
@@ -773,7 +773,8 @@ namespace OBMS.WebAPI.Services
                 WeeklyOff = simplifiedDto.WeeklyOff,
                 HolidayOrNationalHoliday = simplifiedDto.HolidayOrNationalHoliday,
                 Leave = simplifiedDto.Leave,
-                Total = simplifiedDto.Total
+                Total = simplifiedDto.Total,
+                ClientCode = simplifiedDto.ClientCode  // propagate for period resolution
             };
 
             // Parse start/end time strings carried in Unit/Designation fields

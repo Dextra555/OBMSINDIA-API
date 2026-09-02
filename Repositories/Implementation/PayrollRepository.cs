@@ -50,6 +50,8 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
         private readonly IProfessionalTaxService _professionalTaxService;
 
+        private readonly IAttendancePeriodService _attendancePeriodService;
+
 
 
         public PayrollRepository(
@@ -62,7 +64,9 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
             ITDSCalculationService tdsCalculationService,
 
-            IProfessionalTaxService professionalTaxService)
+            IProfessionalTaxService professionalTaxService,
+
+            IAttendancePeriodService attendancePeriodService)
 
         {
 
@@ -75,6 +79,8 @@ namespace OBMS.WebAPI.Repositories.Implementation
             _tdsCalculationService = tdsCalculationService;
 
             _professionalTaxService = professionalTaxService;
+
+            _attendancePeriodService = attendancePeriodService;
 
         }
 
@@ -1089,7 +1095,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
             {
                 // Get the first day of the attendance period month
                 var periodFirstDay = new DateTime(period.Year, period.Month, 1);
-                var periodLastDay = new DateTime(period.Year, period.Month, DateTime.DaysInMonth(period.Year, period.Month));
+                var periodLastDay = new DateTime(period.Year, period.Month, DateTime.DaysInMonth(period.Year, period.Month)); // kept as calendar-month boundary for agreement filter
 
                 // Include Active clients, plus Inactive clients whose termination falls within the selected period month
                 query = query.Where(c => c.Status == "Active" ||
@@ -1854,16 +1860,18 @@ namespace OBMS.WebAPI.Repositories.Implementation
                                 }
                             }
 
-                            // Calculate period as last day of month
-                            var period = new DateTime(
+                            // Resolve period key via AttendancePeriodService (custom or calendar month)
+                            var periodInfo = await _attendancePeriodService.GetAttendancePeriodAsync(
+                                attendanceDto.ClientCode ?? employeeClientCode,
                                 attendanceDto.Period.Year,
-                                attendanceDto.Period.Month,
-                                DateTime.DaysInMonth(attendanceDto.Period.Year, attendanceDto.Period.Month)
-                            );
+                                attendanceDto.Period.Month);
+                            var period = periodInfo.PeriodKey;
 
-                            // Check if attendance record exists for this employee and period
+                            // Check if attendance record exists for this employee and period (year+month match)
                             var existingAttendance = await _oBMSDbContext.Attendances
-                                .FirstOrDefaultAsync(a => a.EmployeeID == employee.EMP_ID && a.Period.Date == period.Date);
+                                .FirstOrDefaultAsync(a => a.EmployeeID == employee.EMP_ID &&
+                                                          a.Period.Year == period.Year &&
+                                                          a.Period.Month == period.Month);
 
                             if (existingAttendance != null)
                             {
@@ -3319,7 +3327,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
             var nameList = _oBMSDbContext.Attendances
 
-                .Where(a => a.Period == period && a.Branch == branch)
+                .Where(a => a.Period.Year == period.Year && a.Period.Month == period.Month && a.Branch == branch)
 
                 .Join(
 
@@ -3635,7 +3643,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                                    join employee in _oBMSDbContext.Employees on attendance.EmployeeID equals employee.EMP_ID
 
-                                   where attendance.Branch == branch && employee.EMP_ROLE.Contains(employeeType) && attendance.Period == period
+                                   where attendance.Branch == branch && employee.EMP_ROLE.Contains(employeeType) && attendance.Period.Year == period.Year && attendance.Period.Month == period.Month
 
                                    orderby employee.EMP_NAME
 
@@ -3645,7 +3653,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
             var salaryProcess = _oBMSDbContext.SalaryProcess
 
-                    .FirstOrDefault(sp => sp.Period == period && sp.Branch == branch && sp.EmployeeType.Contains(employeeType));
+                    .FirstOrDefault(sp => sp.Period.Year == period.Year && sp.Period.Month == period.Month && sp.Branch == branch && sp.EmployeeType.Contains(employeeType));
 
 
 
@@ -3767,7 +3775,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                                        join attendance in _oBMSDbContext.Attendances on emp.EMP_ID equals attendance.EmployeeID
 
-                                       where emp.EMP_CODE == employee && attendance.Period.Date == periodDate.Date
+                                       where emp.EMP_CODE == employee && attendance.Period.Year == periodDate.Year && attendance.Period.Month == periodDate.Month
 
                                        select new { emp, empDetail, attendance }).FirstOrDefaultAsync();
 
@@ -3957,7 +3965,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                                      join attendance in _oBMSDbContext.Attendances on emp.EMP_ID equals attendance.EmployeeID
 
-                                     where emp.EMP_CODE == employee && attendance.Period.Date == periodDate.Date
+                                     where emp.EMP_CODE == employee && attendance.Period.Year == periodDate.Year && attendance.Period.Month == periodDate.Month
 
                                      select new { emp, empDetail, attendance }).FirstOrDefaultAsync();
 
@@ -4057,7 +4065,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                                      join attendance in _oBMSDbContext.Attendances on emp.EMP_ID equals attendance.EmployeeID
 
-                                     where emp.EMP_CODE == employee && attendance.Period.Date == periodDate.Date
+                                     where emp.EMP_CODE == employee && attendance.Period.Year == periodDate.Year && attendance.Period.Month == periodDate.Month
 
                                      select new { emp, empDetail, attendance }).FirstOrDefaultAsync();
 
@@ -4161,7 +4169,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                                    join attendance in _oBMSDbContext.Attendances on emp.EMP_ID equals attendance.EmployeeID
 
-                                   where emp.EMP_CODE == employee && attendance.Period.Date == periodDate.Date
+                                   where emp.EMP_CODE == employee && attendance.Period.Year == periodDate.Year && attendance.Period.Month == periodDate.Month
 
                                    select new { emp, empDetail, attendance }).FirstOrDefaultAsync();
 
@@ -4526,8 +4534,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
                                 var attendanceHeader = existingAttendance ?? new Attendance
                                 {
                                     EmployeeID = employee.EMP_ID,
-                                    Period = new DateTime(attendance.Period.Year, attendance.Period.Month, 
-                                                          DateTime.DaysInMonth(attendance.Period.Year, attendance.Period.Month)),
+                                    Period = _attendancePeriodService.GetAttendancePeriod(attendance.ClientCode ?? string.Empty, attendance.Period.Year, attendance.Period.Month).PeriodKey,
                                     Branch = attendance.BranchCode,
                                     Shift2Type = attendance.Shift2Type,
                                     Shift2Rate = attendance.Shift2Rate,
@@ -4800,4 +4807,5 @@ namespace OBMS.WebAPI.Repositories.Implementation
     }
 
 }
+
 

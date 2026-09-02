@@ -64,6 +64,7 @@ builder.Services.AddScoped<IGSTCalculationService, GSTCalculationService>();
 
 // Add Excel Services
 builder.Services.AddScoped<IAttendanceExcelService, AttendanceExcelService>();
+builder.Services.AddScoped<IAttendancePeriodService, AttendancePeriodService>();
 
 //builder.Services.AddScoped<DataAccess>();
 

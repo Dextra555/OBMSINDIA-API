@@ -92,6 +92,7 @@ public partial class OBMSDbContext : DbContext
     public DbSet<ServiceType> ServiceTypes { get; set; }
     public DbSet<TDSReportResult> TDSReportResults { get; set; }
     public DbSet<BranchPaymentsDto> BranchPaymentsDtos { get; set; }
+    public DbSet<ClientAttendancePeriod> ClientAttendancePeriods { get; set; }
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<BranchPaymentForBranch>().ToTable("BranchPaymentsForBranch");

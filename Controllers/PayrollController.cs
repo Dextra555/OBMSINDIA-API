@@ -40,9 +40,11 @@ namespace OBMS.WebAPI.Controllers
 
         private readonly IAttendanceExcelService _attendanceExcelService;
 
+        private readonly IAttendancePeriodService _attendancePeriodService;
 
 
-        public PayrollController(IPayrollRepository payrollRepository, OBMSDbContext oBMSDbContext, ISalaryProcess salaryProcess, IProfessionalTaxService professionalTaxService, IAttendanceExcelService attendanceExcelService)
+
+        public PayrollController(IPayrollRepository payrollRepository, OBMSDbContext oBMSDbContext, ISalaryProcess salaryProcess, IProfessionalTaxService professionalTaxService, IAttendanceExcelService attendanceExcelService, IAttendancePeriodService attendancePeriodService)
 
         {
 
@@ -55,6 +57,8 @@ namespace OBMS.WebAPI.Controllers
             _professionalTaxService = professionalTaxService;
 
             _attendanceExcelService = attendanceExcelService;
+
+            _attendancePeriodService = attendancePeriodService;
 
         }
 
@@ -1072,7 +1076,27 @@ namespace OBMS.WebAPI.Controllers
 
         #region Attendance
 
-
+        // ── GetAttendancePeriod (client-wise custom period) ──────────────────
+        [HttpGet]
+        [Route("GetAttendancePeriod")]
+        public async Task<ActionResult<AttendancePeriodDto>> GetAttendancePeriod(
+            string clientCode, int year, int month)
+        {
+            try
+            {
+                var result = await _attendancePeriodService.GetAttendancePeriodAsync(clientCode, year, month);
+                return Ok(new AttendancePeriodDto
+                {
+                    StartDate = result.StartDate,
+                    EndDate   = result.EndDate,
+                    PeriodKey = result.PeriodKey,
+                    IsCustom  = result.IsCustom,
+                    TotalDays = result.TotalDays,
+                    Label     = $"{result.StartDate:dd-MMM-yyyy} to {result.EndDate:dd-MMM-yyyy}"
+                });
+            }
+            catch (Exception ex) { return StatusCode(500, $"Internal server error: {ex.Message}"); }
+        }
 
         [HttpGet]
 
@@ -2103,12 +2127,13 @@ namespace OBMS.WebAPI.Controllers
                     }
                 }
 
-                // Calculate period as last day of month (like UI)
-                var period = new DateTime(
-                    attendance.attendanceModel.Period.Year, 
-                    attendance.attendanceModel.Period.Month, 
-                    DateTime.DaysInMonth(attendance.attendanceModel.Period.Year, attendance.attendanceModel.Period.Month)
-                );
+                // Resolve period key via AttendancePeriodService (custom or calendar month fallback)
+                var refDate    = attendance.attendanceModel!.Period;
+                var periodInfo = await _attendancePeriodService.GetAttendancePeriodAsync(
+                    attendance.ClientCode ?? string.Empty,
+                    refDate.Year,
+                    refDate.Month);
+                var period = periodInfo.PeriodKey;
 
                 var attendanceModel = new Attendance()
 
