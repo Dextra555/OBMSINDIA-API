@@ -65,6 +65,14 @@ namespace OBMS.WebAPI.Models.DTO
         public DateTime? TransferDate { get; set; }
         public bool HasTransfered { get; set; }
 
+        /// <summary>True when the branch is being changed while editing this employee.</summary>
+        public bool IsBranchChanged { get; set; }
+
+        /// <summary>Effective Start Date at the new branch — required when IsBranchChanged = true.
+        /// It closes the previous open EmployeeHistory row (Emp_EndDate) and becomes the
+        /// Emp_StartDate of the new branch-change row.</summary>
+        public DateTime? BranchStartDate { get; set; }
+
         public int EMP_CITIZEN { get; set; }
         public int EMP_CHECKLIST { get; set; }
         public string? EMP_CLIENT { get; set; }

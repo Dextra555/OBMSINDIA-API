@@ -74,6 +74,12 @@
         public DateTime? LASTUPDATE { get; set; }
         public string? LastUpdatedBy { get; set; }
         public bool? INCOMETAXDETECT { get; set; }
+
+        /// <summary>Start date at this branch. NULL means no period set yet.</summary>
+        public DateTime? Emp_StartDate { get; set; }
+
+        /// <summary>End date at this branch. NULL means currently active.</summary>
+        public DateTime? Emp_EndDate { get; set; }
     }
 
 }

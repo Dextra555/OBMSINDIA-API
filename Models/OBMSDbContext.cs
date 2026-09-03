@@ -36,6 +36,8 @@ public partial class OBMSDbContext : DbContext
     public virtual DbSet<InvoiceDetails> InvoiceDetails { get; set; }
     public virtual DbSet<ClientInvoiceDetail> ClientInvoiceDetails { get; set; }
     public virtual DbSet<EmployeeHistory> EmployeeHistories { get; set; }
+    public virtual DbSet<EmployeeSalaryDetailHistory> EmployeeSalaryDetailHistories { get; set; }
+    public virtual DbSet<EmploymentDetailsHistory> EmploymentDetailsHistories { get; set; }
     public DbSet<EmployeeItemIssue> EmployeeItemIssues { get; set; }
     public virtual DbSet<SalaryAdvance> SalaryAdvances { get; set; }
     public DbSet<InventoryCategory> InventoryCategories { get; set; }
