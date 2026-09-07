@@ -95,6 +95,8 @@ public partial class OBMSDbContext : DbContext
     public DbSet<TDSReportResult> TDSReportResults { get; set; }
     public DbSet<BranchPaymentsDto> BranchPaymentsDtos { get; set; }
     public DbSet<ClientAttendancePeriod> ClientAttendancePeriods { get; set; }
+    public DbSet<EmployeeLeaveBalance> EmployeeLeaveBalances { get; set; }
+    public DbSet<LeaveEntitlement> LeaveEntitlements { get; set; }
     public virtual DbSet<CreditNote> CreditNotes { get; set; }
     public virtual DbSet<DebitNote> DebitNotes { get; set; }
 

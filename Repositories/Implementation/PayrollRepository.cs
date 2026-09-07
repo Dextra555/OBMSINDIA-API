@@ -1459,83 +1459,141 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
             {
 
-                var leaveQuery = from attendanceDetail in _oBMSDbContext.AttendanceDetails
+                // Count annual leave taken (Type=8) within the same year, up to and including the period date
+                // Inclusive so that a leave recorded on the last day of the month (e.g. 31-08-2026)
+                // is deducted from that same month's remaining (10 -> 9), like the running month-by-month flow.
+                var leaveTakenQuery = (from attendanceDetail in _oBMSDbContext.AttendanceDetails
 
-                                 join attendance in _oBMSDbContext.Attendances on attendanceDetail.AttendanceID equals attendance.ID
+                                       join attendance in _oBMSDbContext.Attendances on attendanceDetail.AttendanceID equals attendance.ID
 
-                                 join employee in _oBMSDbContext.Employees on attendance.EmployeeID equals employee.EMP_ID
+                                       join employee in _oBMSDbContext.Employees on attendance.EmployeeID equals employee.EMP_ID
+
+                                       join employmentDetail in _oBMSDbContext.EmploymentDetails on employee.EMP_CODE equals employmentDetail.EMPPAY_CODE
+
+                                       where attendanceDetail.AttendanceDate <= period
+
+                                          && attendanceDetail.AttendanceDate.Year == period.Year
+
+                                          && attendanceDetail.Type == 8
+
+                                          && employee.EMP_ID == employeeID
+
+                                       select attendanceDetail.ID).Count();
+
+                // Get employment details and the LeaveSystem config row for the employee
+                // LeaveSystem is a single config table (cross join), not per-employee - cannot use LS_ID = EMP_ID
+                var leaveData = (from employee in _oBMSDbContext.Employees
 
                                  join employmentDetail in _oBMSDbContext.EmploymentDetails on employee.EMP_CODE equals employmentDetail.EMPPAY_CODE
 
-                                 where attendanceDetail.AttendanceDate < period && attendanceDetail.Type == 8 && employee.EMP_ID == employeeID
+                                 where employee.EMP_ID == employeeID
 
-                                 select new
+                                 select employmentDetail).FirstOrDefault();
 
-                                 {
+                var leaveSystemConfig = _oBMSDbContext.LeaveSystems.FirstOrDefault();
 
-                                     LeaveTaken = 1, // Assuming 1 for LeaveTaken
+                int leaveAvailable = 0;
 
-                                     LeaveAvailable = 0
-
-                                 };
-
-
-
-                var leaveAvailableQuery = from leaveSystem in _oBMSDbContext.LeaveSystems
-
-                                          join employee in _oBMSDbContext.Employees on leaveSystem.LS_ID equals employee.EMP_ID
-
-                                          join employmentDetail in _oBMSDbContext.EmploymentDetails on employee.EMP_CODE equals employmentDetail.EMPPAY_CODE
-
-                                          where employee.EMP_ID == employeeID
-
-                                          select new
-
-                                          {
-
-                                              LeaveTaken = 0,
-
-                                              LeaveAvailable = leaveSystem.al0to1 * ((period.Year - employmentDetail.EMPPAY_DATE_JOINED.Year == 0) ? DateDiffInMonths(employmentDetail.EMPPAY_DATE_JOINED, period) / 12 : 0)
-
-                                              // Add similar conditions for other cases
-
-                                          };
-
-
-
-                //var result = leaveQuery.Union(leaveAvailableQuery).GroupBy(x => 1)
-
-                //                          .Select(g => new
-
-                //                          {
-
-                //                              LeaveTaken = g.Sum(x => x.LeaveTaken),
-
-                //                              LeaveAvailable = g.Sum(x => x.LeaveAvailable)
-
-                //                          })
-
-                //                          .FirstOrDefault();
-
-
-
-                var result = new
+                if (leaveData != null && leaveSystemConfig != null)
 
                 {
 
-                    LeaveTaken = leaveQuery.Sum(x => x.LeaveTaken),
+                    DateTime dateJoined = leaveData.EMPPAY_DATE_JOINED;
 
-                    LeaveAvailable = leaveAvailableQuery.Sum(x => x.LeaveAvailable)
+                    int monthsDiff = DateDiffInMonths(dateJoined, period);
 
-                };
+                    int yearsDiff = period.Year - dateJoined.Year;
 
+                    if (yearsDiff == 0)
 
+                    {
 
-                //return (int)result.LeaveAvailable - result.LeaveTaken;
+                        leaveAvailable = (int)((double)leaveSystemConfig.al0to1 * monthsDiff / 12);
 
+                    }
 
+                    else if (yearsDiff == 1)
 
-                return result != null ? ((int)result.LeaveAvailable - result.LeaveTaken) : 0;
+                    {
+
+                        if (monthsDiff <= 12)
+
+                            leaveAvailable = (int)((double)leaveSystemConfig.al0to1 * monthsDiff / 12);
+
+                        else
+
+                            leaveAvailable = (int)leaveSystemConfig.AL1to2;
+
+                    }
+
+                    else if (yearsDiff == 2)
+
+                    {
+
+                        if (monthsDiff >= 13 && monthsDiff <= 24)
+
+                            leaveAvailable = (int)leaveSystemConfig.AL1to2;
+
+                        else
+
+                            leaveAvailable = (int)((double)leaveSystemConfig.AL2to5 * monthsDiff / 12 - 24 + (double)leaveSystemConfig.AL1to2);
+
+                    }
+
+                    else if (yearsDiff == 3)
+
+                    {
+
+                        if (monthsDiff >= 25 && monthsDiff <= 28)
+
+                            leaveAvailable = (int)((double)leaveSystemConfig.AL2to5 * monthsDiff / 12 - 24 + (double)leaveSystemConfig.AL1to2);
+
+                        else
+
+                            leaveAvailable = (int)leaveSystemConfig.AL2to5;
+
+                    }
+
+                    else if (yearsDiff >= 4 && yearsDiff <= 5)
+
+                    {
+
+                        if (monthsDiff >= 25 && monthsDiff <= 60)
+
+                            leaveAvailable = (int)leaveSystemConfig.AL2to5;
+
+                        else
+
+                            leaveAvailable = (int)(Math.Round(((monthsDiff - 61) * 1.0 / 12) * 4, 0) + (double)leaveSystemConfig.AL2to5);
+
+                    }
+
+                    else if (yearsDiff == 6)
+
+                    {
+
+                        if (monthsDiff >= 61 && monthsDiff <= 63)
+
+                            leaveAvailable = (int)((double)leaveSystemConfig.AL6 * monthsDiff / 12 - 68);
+
+                        else
+
+                            leaveAvailable = (int)leaveSystemConfig.AL6;
+
+                    }
+
+                    else
+
+                    {
+
+                        // 7+ years
+                        leaveAvailable = (int)leaveSystemConfig.AL6;
+
+                    }
+
+                }
+
+                return leaveAvailable - leaveTakenQuery;
 
 
 

@@ -1190,6 +1190,44 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
             {
 
+                var firstLeaveDetails = await _oBMSDbContext.LeaveSystems.OrderBy(x => x.LS_ID).FirstOrDefaultAsync();
+
+                if (firstLeaveDetails != null)
+
+                {
+
+                    firstLeaveDetails.al0to1 = leaveMaster.al0to1;
+
+                    firstLeaveDetails.AL1to2 = leaveMaster.AL1to2;
+
+                    firstLeaveDetails.AL2to5 = leaveMaster.AL2to5;
+
+                    firstLeaveDetails.AL6 = leaveMaster.AL6;
+
+                    firstLeaveDetails.ml0to2 = leaveMaster.ml0to2;
+
+                    firstLeaveDetails.ml2to5 = leaveMaster.ml2to5;
+
+                    firstLeaveDetails.ML6 = leaveMaster.ML6;
+
+                    firstLeaveDetails.HL = leaveMaster.HL;
+
+                    firstLeaveDetails.MtnyL = leaveMaster.MtnyL;
+
+                    firstLeaveDetails.PtnyL = leaveMaster.PtnyL;
+
+                    firstLeaveDetails.LASTUPDATE = leaveMaster.LASTUPDATE;
+
+                    firstLeaveDetails.LastUpdatedBy = leaveMaster.LastUpdatedBy;
+
+                    _oBMSDbContext.Update(firstLeaveDetails);
+
+                    await _oBMSDbContext.SaveChangesAsync();
+
+                    return firstLeaveDetails;
+
+                }
+
                 _oBMSDbContext.Add(leaveMaster);
 
                 await _oBMSDbContext.SaveChangesAsync();
