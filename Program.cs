@@ -95,6 +95,26 @@ builder.Services.AddControllers(options =>
 
 var app = builder.Build();
 
+// Warm up EF Core (model/query compilation) at startup so the first user
+// request after a restart is fast instead of taking ~1.5s to cold-compile.
+try
+{
+    using (var warmupScope = app.Services.CreateScope())
+    {
+        var warmupDb = warmupScope.ServiceProvider.GetRequiredService<OBMSDbContext>();
+        _ = warmupDb.Employees.Count();
+        _ = warmupDb.EmploymentDetails.Count();
+        _ = warmupDb.LeaveSystems.Count();
+        _ = warmupDb.Attendances.Count();
+        _ = warmupDb.LeaveEntitlements.Count();
+        _ = warmupDb.LeaveClassResults.Count();
+    }
+}
+catch
+{
+    // Warmup is best-effort only; never block startup on it.
+}
+
 // Configure the HTTP request pipeline.
 // if (app.Environment.IsDevelopment())
 // {

@@ -1076,7 +1076,7 @@ namespace OBMS.WebAPI.Controllers
 
         #region Attendance
 
-        // ── GetAttendancePeriod (client-wise custom period) ──────────────────
+        // â”€â”€ GetAttendancePeriod (client-wise custom period) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         [HttpGet]
         [Route("GetAttendancePeriod")]
         public async Task<ActionResult<AttendancePeriodDto>> GetAttendancePeriod(
@@ -1455,506 +1455,188 @@ namespace OBMS.WebAPI.Controllers
 
 
         [HttpGet]
-
         [Route("GetAnnualLeave")]
-
         public async Task<Dictionary<string, Object>> GetAnnualLeave(int employeeID, DateTime Period)
-
         {
-
             var results = new Dictionary<string, Object>();
-
-            try
-
-            {
-
-                var sqlQuery = @"
-
-                            SELECT CAST(SUM(LeaveTaken) AS INT) as LeaveTaken, 
-
-                                   CAST(SUM(LeaveAvailable) AS INT) as LeaveAvailable
-
-                            FROM (
-
-                            SELECT COUNT(TYPE) as LeaveTaken, 0 as LeaveAvailable FROM AttendanceDetails
-
-                            INNER JOIN Attendance ON Attendance.ID = AttendanceDetails.AttendanceID
-
-                            INNER JOIN Employee ON Employee.EMP_ID = Attendance.EmployeeID
-
-                            INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
-
-                            WHERE AttendanceDetails.AttendanceDate < @Period AND Year(AttendanceDetails.AttendanceDate) = Year(@Period) AND Type = 8 AND Attendance.EmployeeID = @employeeID
-
-                            UNION
-
-                            SELECT 0 as LeaveTaken, 
-
-                                CASE
-
-                                WHEN DateDiff(day, EMPPAY_DATE_JOINED, @Period) / 365 < 1 THEN CAST(AL0To1 * DateDiff(Month, EMPPAY_DATE_JOINED, @Period) / 12 as int)
-
-                                WHEN DateDiff(day, EMPPAY_DATE_JOINED, @Period) / 365 BETWEEN 1 AND 2 THEN CAST(AL1To2 as int)
-
-                                WHEN DateDiff(day, EMPPAY_DATE_JOINED, @Period) / 365 BETWEEN 3 AND 5 THEN CAST(AL2To5 as int)
-
-                                ELSE CAST(Al6 as int) END as LeaveAvailable
-
-                            FROM leaveSystem, Employee
-
-                            INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
-
-                            WHERE Employee.EMP_ID = @employeeID
-
-                            ) ANNUALLEAVE";
-
-
-
-                var parameters = new[]
-
-                                {
-
-                                 new Microsoft.Data.SqlClient.SqlParameter("@employeeID", employeeID),
-
-                                 new Microsoft.Data.SqlClient.SqlParameter("@Period", Period),
-
-                                };
-
-
-
-
-
-                var result = await _oBMSDbContext.LeaveClassResults
-
-                       .FromSqlRaw(sqlQuery, parameters)
-
-                .FirstOrDefaultAsync();
-
-                results.Add("LeaveTaken", result.LeaveTaken);
-
-                results.Add("LeaveAvailable", result.LeaveAvailable);
-
-            }
-
-            catch (Exception)
-
-            {
-
-
-
-                throw;
-
-            }
-
-
-
-            return results;
-
-        }
-
-
-
-        [HttpGet]
-
-        [Route("GetMedicalLeave")]
-
-        public async Task<Dictionary<string, Object>> GetMedicalLeave(int employeeID, DateTime Period)
-
-        {
-
-            try
-
-            {
-
-                var results = new Dictionary<string, Object>();
-
-                var sqlQuery = @"
-
-                    SELECT CAST(SUM(LeaveTaken) AS INT) as LeaveTaken, 
-
-                           CAST(SUM(LeaveAvailable) AS INT) as LeaveAvailable
-
+            try {
+var sqlQuery = @"
+                    SELECT CAST(SUM(LeaveTaken) AS INT) as LeaveTaken, CAST(SUM(LeaveAvailable) AS INT) as LeaveAvailable
                     FROM (
-
-                        SELECT COUNT(TYPE) as LeaveTaken, 0 as LeaveAvailable
-
-                        FROM AttendanceDetails
-
+                        SELECT COUNT(TYPE) as LeaveTaken, 0 as LeaveAvailable FROM AttendanceDetails
                         INNER JOIN Attendance ON Attendance.ID = AttendanceDetails.AttendanceID
+                        WHERE AttendanceDetails.AttendanceDate <= @Period
+                          AND Year(AttendanceDetails.AttendanceDate) = Year(@Period)
+                          AND Type = 8 AND Attendance.EmployeeID = @employeeID
+                        UNION SELECT 0 as LeaveTaken,
+                                CASE
+                                WHEN DateDiff(YEAR, EMPPAY_DATE_JOINED, @Period) = 0
+                                    THEN CAST(AL0To1 * DateDiff(Month, EMPPAY_DATE_JOINED, @Period)/12 as int)
+                                WHEN DateDiff(YEAR, EMPPAY_DATE_JOINED, @Period) = 1
+                                    THEN CASE WHEN DateDiff(month, EMPPAY_DATE_JOINED, @Period) <= 12
+                                        THEN CAST(AL0To1 * DateDiff(Month, EMPPAY_DATE_JOINED, @Period)/12 as int)
+                                        ELSE CAST(AL1To2 as int) END
+                                WHEN DateDiff(YEAR, EMPPAY_DATE_JOINED, @Period) = 2
+                                    THEN CASE WHEN DateDiff(month, EMPPAY_DATE_JOINED, @Period) BETWEEN 13 AND 24
+                                        THEN CAST(AL1To2 as int)
+                                        ELSE CAST((AL2To5 * DateDiff(Month, EMPPAY_DATE_JOINED, @Period)/12) - 24 + AL1To2 as int) END
+                                WHEN DateDiff(YEAR, EMPPAY_DATE_JOINED, @Period) = 3
+                                    THEN CASE WHEN DateDiff(month, EMPPAY_DATE_JOINED, @Period) BETWEEN 25 AND 28
+                                        THEN CAST((AL2To5 * DateDiff(Month, EMPPAY_DATE_JOINED, @Period)/12) - 24 + AL1To2 as int)
+                                        ELSE CAST(AL2To5 as int) END
+                                WHEN DateDiff(YEAR, EMPPAY_DATE_JOINED, @Period) BETWEEN 4 AND 5
+                                    THEN CASE WHEN DateDiff(month, EMPPAY_DATE_JOINED, @Period) BETWEEN 25 AND 60
+                                        THEN CAST(AL2To5 as int)
+                                        ELSE CAST(ROUND((((DateDiff(Month, EMPPAY_DATE_JOINED, @Period)-61)*1.0/12) * 4),0) + AL2To5 as int) END
+                                WHEN DateDiff(YEAR, EMPPAY_DATE_JOINED, @Period) = 6
+                                    THEN CASE WHEN DateDiff(month, EMPPAY_DATE_JOINED, @Period) BETWEEN 61 AND 63
+                                        THEN CAST(Al6 * DateDiff(Month, EMPPAY_DATE_JOINED, @Period)/12 - 68 as int)
+                                        ELSE CAST(Al6 as int) END
+                                ELSE CAST(Al6 as int)
+                                END as LeaveAvailable
+                        FROM (SELECT TOP 1 * FROM leaveSystem) LS, Employee
+                        INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
+                        WHERE Employee.EMP_ID = @employeeID
+                    ) AL";
+                var p = new[] { new Microsoft.Data.SqlClient.SqlParameter("@employeeID", employeeID), new Microsoft.Data.SqlClient.SqlParameter("@Period", Period) };
+                var r = await _oBMSDbContext.LeaveClassResults.FromSqlRaw(sqlQuery, p).FirstOrDefaultAsync();
+                results.Add("LeaveTaken", r?.LeaveTaken ?? 0); results.Add("LeaveAvailable", r?.LeaveAvailable ?? 0);
+                results.Add("LeaveRemaining", (r?.LeaveAvailable ?? 0) - (r?.LeaveTaken ?? 0));
+            } catch (Exception) { throw; }
+            return results;
+        }
 
+        [HttpGet]
+        [Route("GetMedicalLeave")]
+        public async Task<Dictionary<string, Object>> GetMedicalLeave(int employeeID, DateTime Period)
+        {
+            var results = new Dictionary<string, Object>();
+            try {
+var sqlQuery = @"
+                    SELECT CAST(SUM(LeaveTaken) AS INT) as LeaveTaken, CAST(SUM(LeaveAvailable) AS INT) as LeaveAvailable
+                    FROM (
+                        SELECT COUNT(TYPE) as LeaveTaken, 0 as LeaveAvailable FROM AttendanceDetails
+                        INNER JOIN Attendance ON Attendance.ID = AttendanceDetails.AttendanceID
                         INNER JOIN Employee ON Employee.EMP_ID = Attendance.EmployeeID
-
                         INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
-
-                        WHERE AttendanceDetails.AttendanceDate < @Period
-
-                            AND Year(AttendanceDetails.AttendanceDate) = Year(@Period)
-
-                            AND Type = 9
-
-                            AND Attendance.EmployeeID = @employeeID
-
-                        UNION
-
-                        SELECT 0 as LeaveTaken,
-
-                            CASE
-
-                                WHEN DateDiff(day, EMPPAY_DATE_JOINED, @Period) / 365 < 2 THEN ML0To2
-
-                                WHEN DateDiff(day, EMPPAY_DATE_JOINED, @Period) / 365 BETWEEN 2 AND 5 THEN ML2To5
-
-                                ELSE Ml6
-
-                            END as LeaveAvailable
-
-                        FROM leaveSystem
-
-                        INNER JOIN Employee ON Employee.EMP_ID = @employeeID
-
+                        WHERE YEAR(AttendanceDate) = YEAR(@Period)
+                          AND MONTH(AttendanceDate) <= MONTH(@Period)
+                          AND Type = 9 AND Attendance.EmployeeID = @employeeID
+                        UNION SELECT 0 as LeaveTaken,
+                                CASE
+                                    WHEN DateDiff(day, EMPPAY_DATE_JOINED, @Period) / 365 < 2 THEN ML0To2
+                                    WHEN DateDiff(day, EMPPAY_DATE_JOINED, @Period) / 365 BETWEEN 2 AND 5 THEN ML2To5
+                                    ELSE ML6
+                                END as LeaveAvailable
+                        FROM leaveSystem, Employee
                         INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
-
-                    ) ANNUALLEAVE";
-
-
-
-
-
-                var parameters = new[]
-
-                {
-
-                                 new Microsoft.Data.SqlClient.SqlParameter("@employeeID", employeeID),
-
-                                new Microsoft.Data.SqlClient.SqlParameter("@Period", Period),
-
-                    };
-
-
-
-
-
-                var result = await _oBMSDbContext.LeaveClassResults
-
-                       .FromSqlRaw(sqlQuery, parameters)
-
-                .FirstOrDefaultAsync();
-
-                results.Add("LeaveTaken", result.LeaveTaken);
-
-                results.Add("LeaveAvailable", result.LeaveAvailable);
-
-
-
-                return results;
-
-            }
-
-            catch
-
-            {
-
-                throw;
-
-            }
-
-
-
+                        WHERE Employee.EMP_ID = @employeeID
+                    ) ML";
+                var p = new[] { new Microsoft.Data.SqlClient.SqlParameter("@employeeID", employeeID), new Microsoft.Data.SqlClient.SqlParameter("@Period", Period) };
+                var r = await _oBMSDbContext.LeaveClassResults.FromSqlRaw(sqlQuery, p).FirstOrDefaultAsync();
+                results.Add("LeaveTaken", r?.LeaveTaken ?? 0); results.Add("LeaveAvailable", r?.LeaveAvailable ?? 0);
+                results.Add("LeaveRemaining", (r?.LeaveAvailable ?? 0) - (r?.LeaveTaken ?? 0));
+            } catch { throw; }
+            return results;
         }
 
-
-
         [HttpGet]
-
         [Route("GetMaternityLeave")]
-
         public async Task<Dictionary<string, Object>> GetMaternityLeave(int employeeID, DateTime Period)
-
         {
-
-            try
-
-            {
-
-                var results = new Dictionary<string, Object>();
-
-                var sqlQuery = @"
-
-                            SELECT CAST(SUM(LeaveTaken) AS INT) as LeaveTaken, 
-
-                                   CAST(SUM(LeaveAvailable) AS INT) as LeaveAvailable
-
-                            FROM (
-
-                            SELECT COUNT(TYPE) as LeaveTaken, 0 as LeaveAvailable
-
-                            FROM AttendanceDetails
-
-                            INNER JOIN Attendance ON Attendance.ID = AttendanceDetails.AttendanceID
-
-                            INNER JOIN Employee ON Employee.EMP_ID = Attendance.EmployeeID
-
-                            INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
-
-                            WHERE AttendanceDetails.AttendanceDate < @Period AND Year(AttendanceDetails.AttendanceDate) = Year(@Period) AND Type = 10 AND Attendance.EmployeeID = @employeeID
-
-                            UNION
-
-                            SELECT 0 as LeaveTaken, MtnyL as LeaveAvailable
-
-                            FROM leaveSystem, Employee
-
-                            INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
-
-                            WHERE Employee.EMP_ID = @employeeID
-
-                            ) ANNUALLEAVE";
-
-
-
-                var parameters = new[]
-
-                {
-
-                                 new Microsoft.Data.SqlClient.SqlParameter("@employeeID", employeeID),
-
-                                new Microsoft.Data.SqlClient.SqlParameter("@Period", Period),
-
-                    };
-
-
-
-
-
-                var result = await _oBMSDbContext.LeaveClassResults
-
-                       .FromSqlRaw(sqlQuery, parameters)
-
-                .FirstOrDefaultAsync();
-
-                results.Add("LeaveTaken", result.LeaveTaken);
-
-                results.Add("LeaveAvailable", result.LeaveAvailable);
-
-
-
-                return results;
-
-            }
-
-            catch
-
-            {
-
-                throw;
-
-            }
-
-
-
+            var results = new Dictionary<string, Object>();
+            try {
+var sqlQuery = @"
+                    SELECT CAST(SUM(LeaveTaken) AS INT) as LeaveTaken, CAST(SUM(LeaveAvailable) AS INT) as LeaveAvailable
+                    FROM (
+                        SELECT COUNT(TYPE) as LeaveTaken, 0 as LeaveAvailable FROM AttendanceDetails
+                        INNER JOIN Attendance ON Attendance.ID = AttendanceDetails.AttendanceID
+                        INNER JOIN Employee ON Employee.EMP_ID = Attendance.EmployeeID
+                        INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
+                        WHERE YEAR(AttendanceDate) = YEAR(@Period)
+                          AND MONTH(AttendanceDate) <= MONTH(@Period)
+                          AND Type = 10 AND Attendance.EmployeeID = @employeeID
+                        UNION SELECT 0 as LeaveTaken, MtnyL as LeaveAvailable
+                        FROM leaveSystem, Employee
+                        INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
+                        WHERE Employee.EMP_ID = @employeeID
+                    ) MTL";
+                var p = new[] { new Microsoft.Data.SqlClient.SqlParameter("@employeeID", employeeID), new Microsoft.Data.SqlClient.SqlParameter("@Period", Period) };
+                var r = await _oBMSDbContext.LeaveClassResults.FromSqlRaw(sqlQuery, p).FirstOrDefaultAsync();
+                results.Add("LeaveTaken", r?.LeaveTaken ?? 0); results.Add("LeaveAvailable", r?.LeaveAvailable ?? 0);
+                results.Add("LeaveRemaining", (r?.LeaveAvailable ?? 0) - (r?.LeaveTaken ?? 0));
+            } catch { throw; }
+            return results;
         }
 
-
-
         [HttpGet]
-
         [Route("GetPaternityLeave")]
-
         public async Task<Dictionary<string, Object>> GetPaternityLeave(int employeeID, DateTime Period)
-
         {
-
-            try
-
-            {
-
-                var results = new Dictionary<string, Object>();
-
-                var sqlQuery = @"
-
-                             SELECT CAST(SUM(LeaveTaken) AS INT) as LeaveTaken, 
-
-                                    CAST(SUM(LeaveAvailable) AS INT) as LeaveAvailable
-
-                            FROM (
-
-                            SELECT COUNT(TYPE) as LeaveTaken, 0 as LeaveAvailable FROM AttendanceDetails
-
-                            INNER JOIN Attendance ON Attendance.ID = AttendanceDetails.AttendanceID
-
-                            INNER JOIN Employee ON Employee.EMP_ID = Attendance.EmployeeID
-
-                            INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
-
-                            WHERE AttendanceDetails.AttendanceDate < @Period AND Year(AttendanceDetails.AttendanceDate) = Year(@Period) AND Type = 11 AND Attendance.EmployeeID = @employeeID
-
-                            UNION
-
-                            SELECT 0 as LeaveTaken, PtnyL as LeaveAvailable
-
-                            FROM leaveSystem, Employee
-
-                            INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
-
-                            WHERE Employee.EMP_ID = @employeeID
-
-                            ) ANNUALLEAVE";
-
-
-
-                var parameters = new[]
-
-                {
-
-                                 new Microsoft.Data.SqlClient.SqlParameter("@employeeID", employeeID),
-
-                                new Microsoft.Data.SqlClient.SqlParameter("@Period", Period),
-
-                    };
-
-
-
-
-
-                var result = await _oBMSDbContext.LeaveClassResults
-
-                       .FromSqlRaw(sqlQuery, parameters)
-
-                .FirstOrDefaultAsync();
-
-                results.Add("LeaveTaken", result.LeaveTaken);
-
-                results.Add("LeaveAvailable", result.LeaveAvailable);
-
-
-
-                return results;
-
-            }
-
-            catch
-
-            {
-
-                throw;
-
-            }
-
-
-
+            var results = new Dictionary<string, Object>();
+            try {
+var sqlQuery = @"
+                    SELECT CAST(SUM(LeaveTaken) AS INT) as LeaveTaken, CAST(SUM(LeaveAvailable) AS INT) as LeaveAvailable
+                    FROM (
+                        SELECT COUNT(TYPE) as LeaveTaken, 0 as LeaveAvailable FROM AttendanceDetails
+                        INNER JOIN Attendance ON Attendance.ID = AttendanceDetails.AttendanceID
+                        INNER JOIN Employee ON Employee.EMP_ID = Attendance.EmployeeID
+                        INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
+                        WHERE YEAR(AttendanceDate) = YEAR(@Period)
+                          AND MONTH(AttendanceDate) <= MONTH(@Period)
+                          AND Type = 11 AND Attendance.EmployeeID = @employeeID
+                        UNION SELECT 0 as LeaveTaken, PtnyL as LeaveAvailable
+                        FROM leaveSystem, Employee
+                        INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
+                        WHERE Employee.EMP_ID = @employeeID
+                    ) PTL";
+                var p = new[] { new Microsoft.Data.SqlClient.SqlParameter("@employeeID", employeeID), new Microsoft.Data.SqlClient.SqlParameter("@Period", Period) };
+                var r = await _oBMSDbContext.LeaveClassResults.FromSqlRaw(sqlQuery, p).FirstOrDefaultAsync();
+                results.Add("LeaveTaken", r?.LeaveTaken ?? 0); results.Add("LeaveAvailable", r?.LeaveAvailable ?? 0);
+                results.Add("LeaveRemaining", (r?.LeaveAvailable ?? 0) - (r?.LeaveTaken ?? 0));
+            } catch { throw; }
+            return results;
         }
 
-
-
         [HttpGet]
-
         [Route("GetHospitalizationLeave")]
-
         public async Task<Dictionary<string, Object>> GetHospitalizationLeave(int employeeID, DateTime Period)
-
         {
-
-            try
-
-            {
-
-                var results = new Dictionary<string, Object>();
-
-                var sqlQuery = @"
-
-                             SELECT CAST(SUM(LeaveTaken) AS INT) as LeaveTaken, 
-
-                                    CAST(SUM(LeaveAvailable) AS INT) as LeaveAvailable
-
-                             FROM (
-
-                            SELECT COUNT(TYPE) as LeaveTaken, 0 as LeaveAvailable FROM AttendanceDetails
-
-                                INNER JOIN Attendance ON Attendance.ID = AttendanceDetails.AttendanceID
-
-                                INNER JOIN Employee ON Employee.EMP_ID = Attendance.EmployeeID
-
-                                INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
-
-                                WHERE AttendanceDetails.AttendanceDate < @Period AND Year(AttendanceDetails.AttendanceDate) = Year(@Period) AND Type = 12 AND Attendance.EmployeeID = @employeeID
-
-                            UNION
-
-                            SELECT 0 as LeaveTaken, HL as LeaveAvailable
-
-                                FROM leaveSystem, Employee
-
-                                INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
-
-                                WHERE Employee.EMP_ID = @employeeID
-
-                            ) ANNUALLEAVE";
-
-
-
-                var parameters = new[]
-
-                {
-
-                                 new Microsoft.Data.SqlClient.SqlParameter("@employeeID", employeeID),
-
-                                new Microsoft.Data.SqlClient.SqlParameter("@Period", Period),
-
-                    };
-
-
-
-
-
-                var result = await _oBMSDbContext.LeaveClassResults
-
-                       .FromSqlRaw(sqlQuery, parameters)
-
-                .FirstOrDefaultAsync();
-
-                results.Add("LeaveTaken", result.LeaveTaken);
-
-                results.Add("LeaveAvailable", result.LeaveAvailable);
-
-
-
-                return results;
-
-            }
-
-            catch
-
-            {
-
-                throw;
-
-            }
-
-
-
+            var results = new Dictionary<string, Object>();
+            try {
+var sqlQuery = @"
+                    SELECT CAST(SUM(LeaveTaken) AS INT) as LeaveTaken, CAST(SUM(LeaveAvailable) AS INT) as LeaveAvailable
+                    FROM (
+                        SELECT COUNT(TYPE) as LeaveTaken, 0 as LeaveAvailable FROM AttendanceDetails
+                        INNER JOIN Attendance ON Attendance.ID = AttendanceDetails.AttendanceID
+                        INNER JOIN Employee ON Employee.EMP_ID = Attendance.EmployeeID
+                        INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
+                        WHERE YEAR(AttendanceDate) = YEAR(@Period)
+                          AND MONTH(AttendanceDate) <= MONTH(@Period)
+                          AND Type = 12 AND Attendance.EmployeeID = @employeeID
+                        UNION SELECT 0 as LeaveTaken, HL as LeaveAvailable
+                        FROM leaveSystem, Employee
+                        INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE
+                        WHERE Employee.EMP_ID = @employeeID
+                    ) HL";
+                var p = new[] { new Microsoft.Data.SqlClient.SqlParameter("@employeeID", employeeID), new Microsoft.Data.SqlClient.SqlParameter("@Period", Period) };
+                var r = await _oBMSDbContext.LeaveClassResults.FromSqlRaw(sqlQuery, p).FirstOrDefaultAsync();
+                results.Add("LeaveTaken", r?.LeaveTaken ?? 0); results.Add("LeaveAvailable", r?.LeaveAvailable ?? 0);
+                results.Add("LeaveRemaining", (r?.LeaveAvailable ?? 0) - (r?.LeaveTaken ?? 0));
+            } catch { throw; }
+            return results;
         }
-
 
 
         [HttpGet]
-
         [Route("CalculateAge")]
-
         public int CalculateAge(DateTime birthDate)
-
         {
-
             int age = _payrollRepository.CalculateAge(birthDate);
-
-
-
             return age;
-
         }
 
-
-
-        [HttpPost]
+            [HttpPost]
 
         [Route("CalculateProfessionalTax")]
 

@@ -36,6 +36,8 @@ public partial class OBMSDbContext : DbContext
     public virtual DbSet<InvoiceDetails> InvoiceDetails { get; set; }
     public virtual DbSet<ClientInvoiceDetail> ClientInvoiceDetails { get; set; }
     public virtual DbSet<EmployeeHistory> EmployeeHistories { get; set; }
+    public virtual DbSet<EmployeeSalaryDetailHistory> EmployeeSalaryDetailHistories { get; set; }
+    public virtual DbSet<EmploymentDetailsHistory> EmploymentDetailsHistories { get; set; }
     public DbSet<EmployeeItemIssue> EmployeeItemIssues { get; set; }
     public virtual DbSet<SalaryAdvance> SalaryAdvances { get; set; }
     public DbSet<InventoryCategory> InventoryCategories { get; set; }
@@ -93,6 +95,8 @@ public partial class OBMSDbContext : DbContext
     public DbSet<TDSReportResult> TDSReportResults { get; set; }
     public DbSet<BranchPaymentsDto> BranchPaymentsDtos { get; set; }
     public DbSet<ClientAttendancePeriod> ClientAttendancePeriods { get; set; }
+    public DbSet<EmployeeLeaveBalance> EmployeeLeaveBalances { get; set; }
+    public DbSet<LeaveEntitlement> LeaveEntitlements { get; set; }
     public virtual DbSet<CreditNote> CreditNotes { get; set; }
     public virtual DbSet<DebitNote> DebitNotes { get; set; }
 

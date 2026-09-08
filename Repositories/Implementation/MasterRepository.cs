@@ -76,71 +76,77 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
         {
 
-            var result = await _oBMSDbContext.BranchMasters
+            bool isSuperAdmin = string.Equals(userName?.Trim(), "superadmin", StringComparison.OrdinalIgnoreCase);
 
+            List<BranchMaster> result;
+
+            if (isSuperAdmin)
+            {
+                result = await _oBMSDbContext.BranchMasters
+                    .Select(x => new BranchMaster
+                    {
+                        ID = x.ID,
+                        Code = x.Code,
+                        Name = x.Name,
+                        Address1 = x.Address1,
+                        Address2 = x.Address2,
+                        PostCode = x.PostCode,
+                        City = x.City,
+                        State = x.State,
+                        Phone = x.Phone,
+                        Fax = x.Fax,
+                        BankName = x.BankName,
+                        BankBranch = x.BankBranch,
+                        BankAccount = x.BankAccount,
+                        PersonIncharge = x.PersonIncharge,
+                        Email = x.Email,
+                        Description = x.Description,
+                        ShortName = x.ShortName,
+                        IsHeadQuarters = x.IsHeadQuarters,
+                        UbsCode = x.UbsCode,
+                        LastUpdate = x.LastUpdate,
+                        LastUpdatedBy = x.LastUpdatedBy,
+                        ParentBranch = x.ParentBranch
+                    })
+                    .Distinct()
+                    .ToListAsync();
+
+                return result;
+            }
+
+            result = await _oBMSDbContext.BranchMasters
                 .Join(_oBMSDbContext.OBMSBranches,
-
                     branchmaster => branchmaster.Code,
-
                     branches => branches.BranchCode,
-
                     (branchmaster, branches) => new { branchmaster, branches })
-
                 .Where(joinResult => joinResult.branches.Name == userName && joinResult.branches.IsAllowed == true)
-
                 .Select(joinResult => new BranchMaster
-
                 {
-
                     ID = joinResult.branchmaster.ID,
-
                     Code = joinResult.branchmaster.Code,
-
                     Name = joinResult.branchmaster.Name,
-
                     Address1 = joinResult.branchmaster.Address1,
-
                     Address2 = joinResult.branchmaster.Address2,
-
                     PostCode = joinResult.branchmaster.PostCode,
-
                     City = joinResult.branchmaster.City,
-
                     State = joinResult.branchmaster.State,
-
                     Phone = joinResult.branchmaster.Phone,
-
                     Fax = joinResult.branchmaster.Fax,
-
                     BankName = joinResult.branchmaster.BankName,
-
                     BankBranch = joinResult.branchmaster.BankBranch,
-
                     BankAccount = joinResult.branchmaster.BankAccount,
-
                     PersonIncharge = joinResult.branchmaster.PersonIncharge,
-
                     Email = joinResult.branchmaster.Email,
-
                     Description = joinResult.branchmaster.Description,
-
                     ShortName = joinResult.branchmaster.ShortName,
-
                     IsHeadQuarters = joinResult.branchmaster.IsHeadQuarters,
-
                     UbsCode = joinResult.branchmaster.UbsCode,
-
                     LastUpdate = joinResult.branchmaster.LastUpdate,
-
                     LastUpdatedBy = joinResult.branchmaster.LastUpdatedBy,
-
                     ParentBranch = joinResult.branchmaster.ParentBranch
-
                 })
-
+                .Distinct()
                 .ToListAsync();
-
-
 
             return result;
 
@@ -1183,6 +1189,44 @@ namespace OBMS.WebAPI.Repositories.Implementation
             else
 
             {
+
+                var firstLeaveDetails = await _oBMSDbContext.LeaveSystems.OrderBy(x => x.LS_ID).FirstOrDefaultAsync();
+
+                if (firstLeaveDetails != null)
+
+                {
+
+                    firstLeaveDetails.al0to1 = leaveMaster.al0to1;
+
+                    firstLeaveDetails.AL1to2 = leaveMaster.AL1to2;
+
+                    firstLeaveDetails.AL2to5 = leaveMaster.AL2to5;
+
+                    firstLeaveDetails.AL6 = leaveMaster.AL6;
+
+                    firstLeaveDetails.ml0to2 = leaveMaster.ml0to2;
+
+                    firstLeaveDetails.ml2to5 = leaveMaster.ml2to5;
+
+                    firstLeaveDetails.ML6 = leaveMaster.ML6;
+
+                    firstLeaveDetails.HL = leaveMaster.HL;
+
+                    firstLeaveDetails.MtnyL = leaveMaster.MtnyL;
+
+                    firstLeaveDetails.PtnyL = leaveMaster.PtnyL;
+
+                    firstLeaveDetails.LASTUPDATE = leaveMaster.LASTUPDATE;
+
+                    firstLeaveDetails.LastUpdatedBy = leaveMaster.LastUpdatedBy;
+
+                    _oBMSDbContext.Update(firstLeaveDetails);
+
+                    await _oBMSDbContext.SaveChangesAsync();
+
+                    return firstLeaveDetails;
+
+                }
 
                 _oBMSDbContext.Add(leaveMaster);
 
