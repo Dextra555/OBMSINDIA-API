@@ -176,5 +176,9 @@ namespace OBMS.WebAPI.Models.Domain
         /// <summary>End date at this branch. NULL means currently active.</summary>
         public DateTime? Emp_EndDate { get; set; }
 
+        // ── Employee Join Date ──────────────────────────────────────────
+        /// <summary>Original date when employee joined the company (from Employee.JoinDate)</summary>
+        public DateTime? JoinDate { get; set; }
+
     }
 }

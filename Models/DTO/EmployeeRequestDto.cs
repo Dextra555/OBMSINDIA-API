@@ -289,6 +289,9 @@ namespace OBMS.WebAPI.Models.DTO
         public int? DepartmentId { get; set; }
         public int? DesignationId { get; set; }
 
+        // Employee Join Date - Original date when employee joined the company
+        public DateTime? JoinDate { get; set; }
+
         // CB (Cost Breakdown) Properties - Simplified
         public decimal? CB_Basic { get; set; }
         public decimal? CB_DA { get; set; }

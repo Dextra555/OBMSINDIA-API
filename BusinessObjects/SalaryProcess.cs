@@ -4,6 +4,7 @@ using System.Data.SqlClient;
 using System.Text;
 using OBMS.WebAPI.Models.DTO;
 using OBMS.WebAPI.Repositories.Interface;
+using OBMS.WebAPI.Services;
 
 namespace OBMS.WebAPI.BusinessObjects
 {
@@ -11,10 +12,12 @@ namespace OBMS.WebAPI.BusinessObjects
     {
         private decimal EmployeeID = 0;
         private readonly IConfiguration _configuration;
+        private readonly IAttendancePeriodService _attendancePeriodService;
 
-        public SalaryProcess(IConfiguration configuration)
+        public SalaryProcess(IConfiguration configuration, IAttendancePeriodService attendancePeriodService)
         {
             _configuration = configuration;
+            _attendancePeriodService = attendancePeriodService;
         }
         public List<KKDNExcelListDto> GetListWithBlankRow(string Branch, string EmployeeType, DateTime dtDateJoinFrom, DateTime dtDateJoinTo, string KDNVetting)
         {
@@ -259,7 +262,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                             decimal dReAllowance = 0;
                                             decimal dReAllowanceRate = 0;
                                             sbQuery = new StringBuilder();
-                                            sbQuery.Append("SELECT EmployeeSalaryDetails.TMPGUARD, EMP_DATE_OF_BIRTH, emp_citizen, EMPPAY_DATE_JOINED, EMPPAY_DATE_RESIGNED, EMPFL_EPF8Pa, EPFDETECT, SOCSODETECT, DETECTBYND55, ");
+                                            sbQuery.Append("SELECT Employee.EMP_CLIENT, EmployeeSalaryDetails.TMPGUARD, EMP_DATE_OF_BIRTH, emp_citizen, EMPPAY_DATE_JOINED, EMPPAY_DATE_RESIGNED, EMPFL_EPF8Pa, EPFDETECT, SOCSODETECT, DETECTBYND55, ");
                                             sbQuery.Append(" INCOMETAXDETECT, EmploymentDetails.EMPPAY_BASIC_RATE, EmploymentDetails.ATTENDANCEALLOWANCE AS AttendanceAllowance, EmploymentDetails.SpecialAllowance, EmploymentDetails.AttendanceAllowanceWorkingDays, ");
                                             sbQuery.Append(" EmploymentDetails.AttendanceAllowanceFollowCalendar, EmployeeSalaryDetails.PAYMODE, SalaryStructure.EmployeeNationality, SalaryStructure.WorkingHours, ");
                                             sbQuery.Append(" SalaryStructure.Name, SalaryStructure.TravelAllowance, SalaryStructure.GeneralDayRate, SalaryStructure.GeneralDayHours, ");
@@ -472,6 +475,58 @@ namespace OBMS.WebAPI.BusinessObjects
 
                                             sbQuery = new StringBuilder();
 
+                                            // Get ClientCode from AttendanceDetails for this employee + period to determine custom period
+                                            string clientCode = string.Empty;
+                                            DateTime periodStartDate = Period;
+                                            DateTime periodEndDate = Period;
+                                            
+                                            try
+                                            {
+                                                SqlCommand cmdGetClient = new SqlCommand();
+                                                // AttendanceDetails.Client stores client NAME — join ClientMaster to get CODE
+                                                cmdGetClient.CommandText = @"
+                                                    SELECT TOP 1 ISNULL(cm.Code, ad.Client)
+                                                    FROM AttendanceDetails ad
+                                                    INNER JOIN Attendance a ON a.ID = ad.AttendanceID
+                                                    LEFT JOIN ClientMaster cm ON cm.Name = ad.Client
+                                                    WHERE a.EmployeeID = @EmployeeID 
+                                                    AND MONTH(a.Period) = @PeriodMonth 
+                                                    AND YEAR(a.Period) = @PeriodYear
+                                                    AND ad.Client IS NOT NULL";
+                                                cmdGetClient.Parameters.AddWithValue("@EmployeeID", EmployeeID);
+                                                cmdGetClient.Parameters.AddWithValue("@PeriodMonth", Period.Month);
+                                                cmdGetClient.Parameters.AddWithValue("@PeriodYear", Period.Year);
+
+                                                using (SQLDataAccess sdaGetClient = new SQLDataAccess(_configuration))
+                                                using (SqlDataReader drClient = sdaGetClient.RetrieveData(cmdGetClient))
+                                                {
+                                                    if (drClient.Read() && !drClient.IsDBNull(0))
+                                                    {
+                                                        clientCode = drClient.GetString(0);
+                                                    }
+                                                }
+
+                                                // If client code found, get custom period date range
+                                                if (!string.IsNullOrEmpty(clientCode))
+                                                {
+                                                    var periodResult = _attendancePeriodService.GetAttendancePeriod(clientCode, Period.Year, Period.Month);
+                                                    periodStartDate = periodResult.StartDate;
+                                                    periodEndDate = periodResult.EndDate;
+                                                }
+                                                else
+                                                {
+                                                    // Default: use calendar month
+                                                    periodStartDate = new DateTime(Period.Year, Period.Month, 1);
+                                                    periodEndDate = periodStartDate.AddMonths(1).AddDays(-1);
+                                                }
+                                            }
+                                            catch
+                                            {
+                                                // Fallback to calendar month if any error
+                                                periodStartDate = new DateTime(Period.Year, Period.Month, 1);
+                                                periodEndDate = periodStartDate.AddMonths(1).AddDays(-1);
+                                            }
+
                                             decimal OTGeneralDayHours = GeneralDayHours;
                                             //if (sSalaryStructure1000_3h != 0)
                                             //{
@@ -485,7 +540,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 sbQuery.Append("ISNULL(SUM(CASE WHEN DateDiff(hour,AttendanceDetails.TimeStart,AttendanceDetails.TimeEnd)>" + GeneralDayHours + " THEN " + GeneralDayHours + " ELSE DateDiff(hour,AttendanceDetails.TimeStart,AttendanceDetails.TimeEnd) END),0) AS NormalHours, ");
                                                 sbQuery.Append("ISNULL(SUM(CASE WHEN DateDiff(hour,AttendanceDetails.TimeStart,AttendanceDetails.TimeEnd)>" + OTGeneralDayHours + " THEN DateDiff(hour,AttendanceDetails.TimeStart,AttendanceDetails.TimeEnd)-" + OTGeneralDayHours + " ELSE 0 END),0) AS OTHours ");
                                                 sbQuery.Append("FROM AttendanceDetails INNER JOIN Attendance ON Attendance.ID = AttendanceDetails.AttendanceID ");
-                                                sbQuery.Append("WHERE Month(AttendanceDetails.AttendanceDate)=@PeriodMonth AND YEAR(AttendanceDetails.AttendanceDate)=@PeriodYear ");
+                                                sbQuery.Append("WHERE AttendanceDetails.AttendanceDate >= @PeriodStartDate AND AttendanceDetails.AttendanceDate <= @PeriodEndDate ");
                                                 sbQuery.Append("AND Attendance.EmployeeID=@EmployeeID ");
                                                 sbQuery.Append("AND Type in (1,3,5) GROUP BY Type ");
                                                 sbQuery.Append("UNION  ");
@@ -496,8 +551,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 sbQuery.Append("FROM AttendanceDetails INNER JOIN Attendance ON Attendance.ID = AttendanceDetails.AttendanceID   ");
                                                 sbQuery.Append("INNER JOIN Employee ON Employee.EMP_ID = Attendance.EmployeeID INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE  ");
                                                 sbQuery.Append("LEFT JOIN SalaryStructure ON SalaryStructure.SalaryID = EmploymentDetails.Salarylab  ");
-                                                sbQuery.Append("WHERE Month(AttendanceDetails.AttendanceDate)=@PeriodMonth ");
-                                                sbQuery.Append("AND YEAR(AttendanceDetails.AttendanceDate)=@PeriodYear ");
+                                                sbQuery.Append("WHERE AttendanceDetails.AttendanceDate >= @PeriodStartDate AND AttendanceDetails.AttendanceDate <= @PeriodEndDate ");
                                                 sbQuery.Append("AND Attendance.EmployeeID=@EmployeeID ");
                                                 sbQuery.Append("AND Type in (2,4,6,7,8,9,10,11,12,13,14,15,16,17) GROUP BY Type ");
                                             }
@@ -508,7 +562,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 sbQuery.Append("ISNULL(SUM(CASE WHEN DateDiff(hour,AttendanceDetails.TimeStart,AttendanceDetails.TimeEnd)>" + GeneralDayHours + " THEN " + GeneralDayHours + " ELSE DateDiff(hour,AttendanceDetails.TimeStart,AttendanceDetails.TimeEnd) END),0) AS NormalHours, ");
                                                 sbQuery.Append("ISNULL(SUM(CASE WHEN DateDiff(hour,AttendanceDetails.TimeStart,AttendanceDetails.TimeEnd)>" + OTGeneralDayHours + " THEN DateDiff(hour,AttendanceDetails.TimeStart,AttendanceDetails.TimeEnd)-" + OTGeneralDayHours + " ELSE 0 END),0) AS OTHours ");
                                                 sbQuery.Append("FROM AttendanceDetails INNER JOIN Attendance ON Attendance.ID = AttendanceDetails.AttendanceID ");
-                                                sbQuery.Append("WHERE Month(AttendanceDetails.AttendanceDate)=@PeriodMonth AND YEAR(AttendanceDetails.AttendanceDate)=@PeriodYear ");
+                                                sbQuery.Append("WHERE AttendanceDetails.AttendanceDate >= @PeriodStartDate AND AttendanceDetails.AttendanceDate <= @PeriodEndDate ");
                                                 sbQuery.Append("AND Attendance.EmployeeID=@EmployeeID ");
                                                 sbQuery.Append("AND Type in (1,3,5) GROUP BY Type ");
                                                 sbQuery.Append("UNION  ");
@@ -519,8 +573,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 sbQuery.Append("FROM AttendanceDetails INNER JOIN Attendance ON Attendance.ID = AttendanceDetails.AttendanceID   ");
                                                 sbQuery.Append("INNER JOIN Employee ON Employee.EMP_ID = Attendance.EmployeeID INNER JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE  ");
                                                 sbQuery.Append("LEFT JOIN SalaryStructure ON SalaryStructure.SalaryID = EmploymentDetails.Salarylab  ");
-                                                sbQuery.Append("WHERE Month(AttendanceDetails.AttendanceDate)=@PeriodMonth ");
-                                                sbQuery.Append("AND YEAR(AttendanceDetails.AttendanceDate)=@PeriodYear ");
+                                                sbQuery.Append("WHERE AttendanceDetails.AttendanceDate >= @PeriodStartDate AND AttendanceDetails.AttendanceDate <= @PeriodEndDate ");
                                                 sbQuery.Append("AND Attendance.EmployeeID=@EmployeeID ");
                                                 sbQuery.Append("AND Type in (2,4,6,7,8,9,10,11,12,13,14,15,16,17) GROUP BY Type ");
                                             }
@@ -528,8 +581,8 @@ namespace OBMS.WebAPI.BusinessObjects
                                             SqlCommand cmdAttendance = new SqlCommand();
                                             cmdAttendance.CommandText = sbQuery.ToString();
                                             cmdAttendance.Parameters.AddWithValue("@EmployeeID", EmployeeID);
-                                            cmdAttendance.Parameters.AddWithValue("@PeriodMonth", Period.Month);
-                                            cmdAttendance.Parameters.AddWithValue("@PeriodYear", Period.Year);
+                                            cmdAttendance.Parameters.AddWithValue("@PeriodStartDate", periodStartDate);
+                                            cmdAttendance.Parameters.AddWithValue("@PeriodEndDate", periodEndDate);
 
                                             decimal BasicSalaryDays = 0;
                                             decimal WorkingDay = 0;

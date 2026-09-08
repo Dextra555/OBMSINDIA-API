@@ -206,6 +206,9 @@ namespace OBMS.WebAPI.Models.Domain
         public int? DepartmentId { get; set; }
         public int? DesignationId { get; set; }
 
+        // Employee Join Date - Stores the original date when employee joined the company
+        public DateTime? JoinDate { get; set; }
+
         // Department and Designation Names (for display purposes, not mapped to database)
         [NotMapped]
         public string? DepartmentName { get; set; }

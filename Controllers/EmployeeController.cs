@@ -411,6 +411,23 @@ namespace OBMS.WebAPI.Controllers
                 employee.DepartmentId = employeeRequestDto.DepartmentId;
                 employee.DesignationId = employeeRequestDto.DesignationId;
 
+                // Map Join Date - Store from form input
+                // Form-ல் இருந்து JoinDate கொடுத்தால் அதை store செய்யும்
+                // இல்லாவிட்டால் EMPPAY_DATE_JOINED-ஐ use செய்யும் (fallback)
+                if (employeeRequestDto.JoinDate.HasValue)
+                {
+                    employee.JoinDate = employeeRequestDto.JoinDate.Value;
+                }
+                else if (employeeRequestDto.EMPPAY_DATE_JOINED.HasValue)
+                {
+                    employee.JoinDate = employeeRequestDto.EMPPAY_DATE_JOINED.Value;
+                }
+                else if (employeeRequestDto.EMP_ID == 0)
+                {
+                    // New employee without join date - use current date as fallback
+                    employee.JoinDate = DateTime.Now;
+                }
+
 
                 var employment = new EmploymentDetails();
                 if (employeeRequestDto.EMPPAY_ID != 0)
