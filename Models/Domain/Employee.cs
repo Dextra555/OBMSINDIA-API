@@ -142,12 +142,12 @@ namespace OBMS.WebAPI.Models.Domain
         // Indian Compliance Fields
         [StringLength(12)]
         [RegularExpression(@"^[2-9][0-9]{11}$", ErrorMessage = "Aadhaar number must be 12 digits starting with 2-9")]
-        [Column("Aadhaar")]
+        [Column("AadhaarNumber")]
         public string? AadhaarNumber { get; set; }
 
         [StringLength(10)]
         [RegularExpression(@"^[A-Z]{5}[0-9]{4}[A-Z]{1}$", ErrorMessage = "PAN number must be in format ABCDE1234F")]
-        [Column("PAN")]
+        [Column("PANNumber")]
         public string? PANNumber { get; set; }
 
         [StringLength(26)]
@@ -155,7 +155,7 @@ namespace OBMS.WebAPI.Models.Domain
         public string? PFAccountNumber { get; set; }
 
         [StringLength(17)]
-        [Column("ESI_Number")]
+        [Column("ESINumber")]
         public string? ESINumber { get; set; }
 
         [StringLength(20)]
@@ -177,7 +177,7 @@ namespace OBMS.WebAPI.Models.Domain
 
         [StringLength(11)]
         [RegularExpression(@"^[A-Z]{4}0[A-Z0-9]{6}$", ErrorMessage = "IFSC code must be in format ABCD0XXXXXX")]
-        [Column("IFSC_Code")]
+        [Column("BankIFSC")]
         public string? BankIFSC { get; set; }
 
         [StringLength(100)]
@@ -207,6 +207,8 @@ namespace OBMS.WebAPI.Models.Domain
         public int? DesignationId { get; set; }
 
         // Employee Join Date - Stores the original date when employee joined the company
+        // Stored in EmploymentDetails table (EMPPAY_DATE_JOINED), not in Employee table
+        [NotMapped]
         public DateTime? JoinDate { get; set; }
 
         // Department and Designation Names (for display purposes, not mapped to database)

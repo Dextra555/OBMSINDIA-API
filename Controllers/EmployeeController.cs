@@ -397,6 +397,7 @@ namespace OBMS.WebAPI.Controllers
                 employee.AadhaarNumber = employeeRequestDto.AadhaarNumber;
                 employee.PANNumber = employeeRequestDto.PANNumber;
                 employee.PFAccountNumber = employeeRequestDto.PFAccountNumber;
+                employee.UANNumber = employeeRequestDto.UANNumber;
                 employee.ESINumber = employeeRequestDto.ESINumber;
                 employee.SalaryGroup = employeeRequestDto.SalaryGroup ?? "None";
                 employee.SpousePAN = employeeRequestDto.SpousePAN;

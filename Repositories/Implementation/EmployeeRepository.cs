@@ -282,7 +282,9 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
 
 
-                var employee = _oBMSDbContext.Employees.Where(x => x.EMP_ID == employeeId).FirstOrDefault();
+                var employee = _oBMSDbContext.Employees.AsNoTracking().Where(x => x.EMP_ID == employeeId).FirstOrDefault();
+
+                var empCode = employee?.EMP_CODE;
 
 
 
@@ -290,13 +292,13 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
 
 
-                var employment = _oBMSDbContext.EmploymentDetails.Where(x => x.EMPPAY_CODE == employee.EMP_CODE).FirstOrDefault();
+var employment = _oBMSDbContext.EmploymentDetails.AsNoTracking().Where(x => x.EMPPAY_CODE == empCode).FirstOrDefault();
 
                 results.Add("employment", employment);
 
 
 
-                var salaryDetail = _oBMSDbContext.EmployeeSalaryDetails.Where(x => x.EMPFL_CODE == employee.EMP_CODE).FirstOrDefault();
+                var salaryDetail = _oBMSDbContext.EmployeeSalaryDetails.AsNoTracking().Where(x => x.EMPFL_CODE == empCode).FirstOrDefault();
 
 
 

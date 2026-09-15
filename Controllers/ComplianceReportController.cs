@@ -1578,11 +1578,11 @@ namespace OBMS.WebAPI.Controllers
 
                 SalaryDate = (string)r.salaryDate
 
-            }).ToList();
+}).ToList();
 
 
 
-            var totals = new Dictionary<string, object>
+                var totals = new Dictionary<string, object>
 
             {
 
@@ -1918,6 +1918,8 @@ namespace OBMS.WebAPI.Controllers
 
                 var rows = await GetPayrollRows(branch, client, periodStart, periodEnd);
 
+                // PF Statement: show ALL employees for the month (no PF Account filter)
+
 
 
                 var pfRows = rows.Select((r, idx) =>
@@ -1980,7 +1982,9 @@ namespace OBMS.WebAPI.Controllers
 
                         sno = idx + 1,
 
-                        uan = (string)r.uan,
+                        EMP_ID = (int)r.EMP_ID,
+
+                        uan = (string)r.pfAccount,   // PF Account Number is used as UAN in this system
 
                         memberName = (string)r.name,
 
@@ -2059,6 +2063,8 @@ namespace OBMS.WebAPI.Controllers
         }
 
 
+
+        // ─── Save UAN (existing UANNumber on Employee master — no new columns) ─────────
 
         // ─── ESI Statement ────────────────────────────────────────────────────────────
 

@@ -137,9 +137,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
                             join client in _oBMSDbContext.ClientMasters on t.Client equals client.Code
                             join branch in _oBMSDbContext.BranchMasters on
                             t.Branch equals branch.Code
-                            where t.AgreementDate == _oBMSDbContext.Agreements
-                                                         .Where(a => a.Client == t.Client && a.Branch == t.Branch)
-                                                         .Max(a => a.AgreementDate)
+                            where (t.IsValid == true || t.IsValid == null)
                             select new
                             {
                                 ID = t.ID,
@@ -166,9 +164,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
                              join client in _oBMSDbContext.ClientMasters on t.Client equals client.Code
                              join branch in _oBMSDbContext.BranchMasters on
                              t.Branch equals branch.Code
-                             where t.AgreementDate == _oBMSDbContext.Agreements
-                                                                  .Where(a => a.Client == t.Client && a.Branch == t.Branch)
-                                                                  .Max(a => a.AgreementDate)
+                             where (t.IsValid == true || t.IsValid == null)
                                 && t.Branch == branchId
                                 && !_oBMSDbContext.TerminatedAgreements
                                                   .Where(terminated => terminated.Branch == branchId)
@@ -405,6 +401,33 @@ namespace OBMS.WebAPI.Repositories.Implementation
                 .CountAsync();
 
             return count;
+        }
+
+        public async Task<bool> CheckDuplicateAgreement(string branch, string client, DateTime agreementDate, int excludeId = 0, string workPlace = null)
+        {
+            var agreementMonth = new DateTime(agreementDate.Year, agreementDate.Month, 1);
+            string wpCheck = (workPlace ?? string.Empty).Trim();
+
+            // Duplicate = same Branch + Client + WorkPlace + same Month.
+            // Different WorkPlace = allowed (different site).
+            // Different month same WorkPlace = allowed (new version row).
+            // Pull matching rows for Branch+Client+Month into memory, then compare WorkPlace in C#
+            // (avoids EF Core translation issues with Trim/ToLower on nullable columns).
+            var candidates = await _oBMSDbContext.Agreements
+                .Where(a =>
+                    a.Branch == branch &&
+                    a.Client == client &&
+                    a.AgreementDate.Month == agreementMonth.Month &&
+                    a.AgreementDate.Year == agreementMonth.Year &&
+                    (a.IsValid == true || a.IsValid == null) &&
+                    a.ID != excludeId
+                )
+                .Select(a => a.WorkPlace)
+                .ToListAsync();
+
+            // Duplicate = same WorkPlace (case-insensitive, trimmed) in the same month
+            return candidates.Any(wp =>
+                string.Equals((wp ?? string.Empty).Trim(), wpCheck, StringComparison.OrdinalIgnoreCase));
         }
     }
 }

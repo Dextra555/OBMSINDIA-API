@@ -113,12 +113,73 @@ namespace OBMS.WebAPI.Controllers
             try
             {
                 var agreement = new Agreement();
+                bool createNewRow = false;  // true = insert new row, false = update existing
+
                 if (agreementRequestDto.ID != 0)
                 {
-                    agreement = _oBMSDbContext.Agreements.Where(x => x.ID == agreementRequestDto.ID).FirstOrDefault();
+                    var existingAgreement = _oBMSDbContext.Agreements
+                        .Where(x => x.ID == agreementRequestDto.ID)
+                        .FirstOrDefault();
+
+                    if (existingAgreement != null)
+                    {
+                        var existingDetails = _oBMSDbContext.AgreementDetails
+                            .Where(x => x.AgreementID == agreementRequestDto.ID)
+                            .ToList();
+
+                        // Only a unique-key change (Branch/Client/WorkPlace/Date month)
+                        // → keep the old record untouched and insert a brand-new row.
+                        // WorkPlace change → new row for new site, old row kept visible.
+                        // Date (month) change → new version row, old row kept visible.
+                        // Same key → edit the existing row in place.
+                        if (AgreementChanged(existingAgreement, agreementRequestDto, existingDetails))
+                        {
+                            createNewRow = true;
+                            agreement = new Agreement();
+                        }
+                        else
+                        {
+                            // Same unique key → update the existing row in place.
+                            // Remove any detail rows that were deleted in the UI so stale
+                            // rows do not remain attached to the agreement.
+                            agreement = existingAgreement;
+                            var incomingDetailIds = agreementRequestDto.agreementDetails?
+                                .Select(d => d.ID)
+                                .ToList() ?? new List<int>();
+                            var staleDetails = existingDetails
+                                .Where(d => !incomingDetailIds.Contains(d.ID))
+                                .ToList();
+                            if (staleDetails.Count > 0)
+                            {
+                                _oBMSDbContext.AgreementDetails.RemoveRange(staleDetails);
+                            }
+                        }
+                    }
                 }
 
+                // Duplicate check: same Branch + Client + WorkPlace + Month = duplicate.
+                // Different WorkPlace = allowed (different site).
+                // Different month same WorkPlace = allowed (new version, handled by createNewRow).
+                // Exclude the original agreement ID when editing so a new version is never
+                // blocked by its own old row.
+                int duplicateExcludeId = agreementRequestDto.ID;
 
+                bool isDuplicate = await _agreementRepository.CheckDuplicateAgreement(
+                    agreementRequestDto.Branch,
+                    agreementRequestDto.Client,
+                    agreementRequestDto.AgreementDate,
+                    duplicateExcludeId,
+                    agreementRequestDto.WorkPlace
+                );
+
+                if (isDuplicate)
+                {
+                    return BadRequest(new
+                    {
+                        Success = "Duplicate",
+                        Message = $"An agreement already exists for this Branch, Client and Work Place '{agreementRequestDto.WorkPlace}' in {agreementRequestDto.AgreementDate:MMMM yyyy}. Please edit that existing agreement instead of creating a duplicate."
+                    });
+                }
 
                 agreement.AgreementDate = agreementRequestDto.AgreementDate;
                 agreement.Branch = agreementRequestDto.Branch;
@@ -129,8 +190,8 @@ namespace OBMS.WebAPI.Controllers
                 agreement.LASTUPDATE = DateTime.Now;
                 agreement.AgreementEndDate = agreementRequestDto.AgreementEndDate;
                 agreement.QuotationID = agreementRequestDto.QuotationID;
-                
-                if (agreementRequestDto.ID == 0)
+
+                if (agreementRequestDto.ID == 0 || createNewRow)
                 {
                     agreement.AddedDate = DateTime.Now;
                 }
@@ -139,6 +200,9 @@ namespace OBMS.WebAPI.Controllers
                     agreement.AddedDate = agreementRequestDto.AddedDate.Value;
                 }
 
+                // When creating a new row (WorkPlace/Date change), the old record is KEPT
+                // valid and visible in the list. New versions are added as extra rows,
+                // so the list shows every version for a Workplace in the order created.
 
                 await _agreementRepository.saveAndUpdateAgreement(agreement);
 
@@ -147,12 +211,15 @@ namespace OBMS.WebAPI.Controllers
                     foreach (AgreementDetailsRequestDto detail in agreementRequestDto.agreementDetails)
                     {
                         var agreementDetail = new AgreementDetails();
-                        if (detail.ID != 0)
+
+                        // If creating a new row (WorkPlace/Date changed), all details go as new inserts
+                        if (!createNewRow && detail.ID != 0)
                         {
                             agreementDetail = _oBMSDbContext.AgreementDetails.Where(x => x.ID == detail.ID).FirstOrDefault();
                         }
 
-                        agreementDetail.ID = detail.ID;
+                        // When creating new row, reset ID so EF Core inserts a new detail row
+                        agreementDetail.ID = createNewRow ? 0 : detail.ID;
                         agreementDetail.AgreementID = agreement.ID;
                         agreementDetail.AgreementDate = agreement.AgreementDate;
                         agreementDetail.Client = agreement.Client;
@@ -632,6 +699,26 @@ namespace OBMS.WebAPI.Controllers
                 _oBMSDbContext.Agreements.Remove(agreement);
                 await _oBMSDbContext.SaveChangesAsync();
 
+                // After deleting the latest row, reactivate the previous history row
+                // for the same Branch+Client+WorkPlace (the one just before this one).
+                // This brings the previous version back to the list.
+                var prevAgreement = await _oBMSDbContext.Agreements
+                    .Where(a =>
+                        a.Branch == agreement.Branch &&
+                        a.Client == agreement.Client &&
+                        a.WorkPlace == agreement.WorkPlace &&
+                        a.IsValid == false)
+                    .OrderByDescending(a => a.ID)
+                    .FirstOrDefaultAsync();
+
+                if (prevAgreement != null)
+                {
+                    prevAgreement.IsValid = true;
+                    prevAgreement.LASTUPDATE = DateTime.Now;
+                    _oBMSDbContext.Agreements.Update(prevAgreement);
+                    await _oBMSDbContext.SaveChangesAsync();
+                }
+
                 return Ok(new { Message = "Deleted successfully" });
             }
             catch (Exception ex)
@@ -730,6 +817,50 @@ namespace OBMS.WebAPI.Controllers
             {
                 return StatusCode(500, new { Message = "Error occurred", Error = ex.Message });
             }
+        }
+
+        [HttpGet]
+        [Route("CheckDuplicateAgreement")]
+        public async Task<ActionResult<Object>> CheckDuplicateAgreement(string branch, string client, DateTime agreementDate, int excludeId = 0, string workPlace = null)
+        {
+            try
+            {
+                var isDuplicate = await _agreementRepository.CheckDuplicateAgreement(branch, client, agreementDate, excludeId, workPlace);
+                return Ok(new { IsDuplicate = isDuplicate });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { Message = "Error occurred", Error = ex.Message });
+            }
+        }
+
+        // Returns true ONLY when the agreement unique key changes:
+        // Branch, Client, Work Place, the AgreementDate month/year, or the AgreementEndDate.
+        // Key change → create a brand-new history row; the old row stays as history.
+        // Every other edit (rates, note, guards...) keeps the same key, so the existing
+        // row is simply updated in place.
+        private bool AgreementChanged(Agreement existing, AgreementRequestDto incoming, List<AgreementDetails> existingDetails)
+        {
+            if (!string.Equals(existing.Branch ?? "", incoming.Branch ?? "", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(existing.Client ?? "", incoming.Client ?? "", StringComparison.OrdinalIgnoreCase) ||
+                !string.Equals(existing.WorkPlace ?? "", incoming.WorkPlace ?? "", StringComparison.OrdinalIgnoreCase) ||
+                !SameMonth(existing.AgreementDate, incoming.AgreementDate) ||
+                !SameDay(existing.AgreementEndDate, incoming.AgreementEndDate))
+            {
+                return true;
+            }
+
+            return false;
+        }
+
+        private static bool SameMonth(DateTime a, DateTime b)
+        {
+            return a.Year == b.Year && a.Month == b.Month;
+        }
+
+        private static bool SameDay(DateTime a, DateTime b)
+        {
+            return a.Year == b.Year && a.Month == b.Month && a.Day == b.Day;
         }
     }
 }

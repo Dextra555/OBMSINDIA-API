@@ -827,6 +827,9 @@ public class QueryResult
     public string Name { get; set; }
     public int ID { get; set; }
     public string InvoiceNo { get; set; }
+    public string? Note { get; set; }
+    public int? AgreementID { get; set; }
+    public string? WorkPlace { get; set; }
 }
 
 [Keyless]

@@ -267,6 +267,8 @@ namespace OBMS.WebAPI.Models.DTO
 
         public string? PFAccountNumber { get; set; }
 
+        public string? UANNumber { get; set; }
+
         public string? ESINumber { get; set; }
 
         public string? SalaryGroup { get; set; }

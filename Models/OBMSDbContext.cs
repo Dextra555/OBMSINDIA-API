@@ -102,6 +102,17 @@ public partial class OBMSDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        foreach (var property in modelBuilder.Model.GetEntityTypes()
+            .SelectMany(entityType => entityType.GetProperties())
+            .Where(property => property.ClrType == typeof(decimal)
+                || Nullable.GetUnderlyingType(property.ClrType) == typeof(decimal)))
+        {
+            property.SetPrecision(18);
+            property.SetScale(8);
+        }
+
+        modelBuilder.Entity<QueryResult>().HasNoKey().ToView(null);
+
         modelBuilder.Entity<BranchPaymentForBranch>().ToTable("BranchPaymentsForBranch");
 
         modelBuilder.Entity<PayToView>().ToTable("PayToView");
@@ -160,7 +171,9 @@ public partial class OBMSDbContext : DbContext
         modelBuilder.Entity<Supplier>().Property(s => s.CreditLimit).HasPrecision(18, 8);
 
         // OtherPayment decimal configurations (if using LINQ-to-Objects)
-        // Note: OtherPayment appears to be a view/DTO, may need validation in actual entity
+        modelBuilder.Entity<OtherPayment>().Property(p => p.ID).HasPrecision(18, 0);
+        modelBuilder.Entity<OtherPayment>().Property(p => p.PaymentID).HasPrecision(18, 0);
+        modelBuilder.Entity<OtherPayment>().Property(p => p.Amount).HasPrecision(18, 2);
 
         // Configure WorkPlace property to handle NULL values by converting to empty string
         modelBuilder.Entity<Quotation>().Property(e => e.WorkPlace).HasDefaultValue("")

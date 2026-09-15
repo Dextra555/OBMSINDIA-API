@@ -29,5 +29,7 @@ namespace OBMS.WebAPI.Repositories.Interface
         Task<bool> CancelAgreement(int agreementId);
 
         Task<int> GetAgreementsPostedThisMonth();
+
+        Task<bool> CheckDuplicateAgreement(string branch, string client, DateTime agreementDate, int excludeId = 0, string workPlace = null);
     }
 }

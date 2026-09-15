@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using System.Data.SqlClient;
 using System.Web.Services.Description;
@@ -94,95 +94,46 @@ namespace OBMS.WebAPI.Controllers
         {
 
             var sqlQuery = @"
-
-    SELECT
-
-        cm.Code,
-
-        cm.Branch,
-
-        cm.Name,
-
-        ISNULL(inv.ID, 0) AS ID,
-
-        ISNULL(inv.InvoiceNo, '') AS InvoiceNo
-
-    FROM
-
-        ClientMaster cm
-
-    FULL OUTER JOIN (
-
-        SELECT
-
-            ci.Branch,
-
-            ci.Client,
-
-            ci.ID,
-
-            ci.InvoiceNo
-
-        FROM
-
-            ClientInvoice ci
-
-        WHERE
-
-            ci.IsDeleted = 'N'
-
-            AND MONTH(ci.InvoiceDate) = @InvoiceMonth
-
-            AND YEAR(ci.InvoiceDate) = @InvoiceYear
-
-    ) inv ON cm.Branch = inv.Branch AND cm.Code = inv.Client
-
-    WHERE
-
-        cm.Branch = @Branch
-
-        AND cm.Code IN (
-
-            SELECT
-
-                a.Client
-
-            FROM
-
-                Agreement a
-
-            WHERE
-
-                a.Branch = @Branch
-
-                AND (
-
-                    a.AgreementEndDate >= DATEADD(month, DATEDIFF(month, 0, '04/30/2016'), 0)
-
-                    OR DATEADD(s, -1, DATEADD(mm, DATEDIFF(m, 0, '04/30/2016') + 1, 0)) >= a.AgreementEndDate
-
-                )
-
-                AND a.Client NOT IN (
-
-                    SELECT
-
-                        ta.Client
-
-                    FROM
-
-                        TerminatedAgreements ta
-
+                    SELECT  
+                        cm.Code, 
+                        cm.Branch, 
+                        cm.Name, 
+                        ISNULL(ci.ID, 0)          AS ID, 
+                        ISNULL(ci.InvoiceNo, '')   AS InvoiceNo,
+                        ISNULL(ci.Note, '')        AS Note,
+                        ag.ID                      AS AgreementID,
+                        ag.WorkPlace
+                    FROM Agreement ag
+                    JOIN ClientMaster cm
+                        ON cm.Code    = ag.Client
+                        AND cm.Branch = ag.Branch
+                    LEFT JOIN ClientInvoice ci
+                        ON ci.AgreementID  = ag.ID
+                        AND ci.IsDeleted   = 'N'
+                        AND MONTH(ci.InvoiceDate) = @InvoiceMonth
+                        AND YEAR(ci.InvoiceDate)  = @InvoiceYear
                     WHERE
-
-                        ta.Branch = @Branch
-
-                        AND ta.TerminationDate < DATEADD(month, DATEDIFF(month, 0, @InvoicePeriod), 0)
-
-                )
-
-        )
-
+                        ag.Branch   = @Branch
+                        AND ag.IsValid = 1
+                        AND ag.AgreementDate <= @InvoicePeriod
+                        AND ag.ID = (
+                            SELECT TOP 1 ag2.ID
+                            FROM Agreement ag2
+                            WHERE ag2.Branch       = ag.Branch
+                              AND ag2.Client       = ag.Client
+                              AND ag2.WorkPlace    = ag.WorkPlace
+                              AND ag2.IsValid      = 1
+                              AND ag2.AgreementDate <= @InvoicePeriod
+                            ORDER BY ag2.AgreementDate DESC, ag2.LASTUPDATE DESC
+                        )
+                        AND ag.Client NOT IN
+                        (
+                            SELECT ta.Client
+                            FROM TerminatedAgreements ta
+                            WHERE ta.Branch = @Branch
+                              AND ta.TerminationDate < DATEADD(month, DATEDIFF(month, 0, @InvoicePeriod), 0)
+                        )
+                    ORDER BY cm.Name, ag.WorkPlace
 ";
 
 
@@ -229,96 +180,47 @@ namespace OBMS.WebAPI.Controllers
 
             {
 
-                var sqlQuery = @"
-
-    SELECT
-
-        cm.Code,
-
-        cm.Branch,
-
-        cm.Name,
-
-        ISNULL(inv.ID, 0) AS ID,
-
-        ISNULL(inv.InvoiceNo, '') AS InvoiceNo
-
-    FROM
-
-        ClientMaster cm
-
-    FULL OUTER JOIN (
-
-        SELECT
-
-            ci.Branch,
-
-            ci.Client,
-
-            ci.ID,
-
-            ci.InvoiceNo
-
-        FROM
-
-            ClientInvoice ci
-
-        WHERE
-
-            ci.IsDeleted = 'N'
-
-            AND MONTH(ci.InvoiceDate) = @InvoiceMonth
-
-            AND YEAR(ci.InvoiceDate) = @InvoiceYear
-
-    ) inv ON cm.Branch = inv.Branch AND cm.Code = inv.Client
-
-    WHERE
-
-        cm.Branch = @Branch
-
-        AND cm.Code IN (
-
-            SELECT
-
-                a.Client
-
-            FROM
-
-                Agreement a
-
-            WHERE
-
-                a.Branch = @Branch
-
-                AND (
-
-                    a.AgreementEndDate >= DATEADD(month, DATEDIFF(month, 0, '04/30/2016'), 0)
-
-                    OR DATEADD(s, -1, DATEADD(mm, DATEDIFF(m, 0, '04/30/2016') + 1, 0)) >= a.AgreementEndDate
-
-                )
-
-                AND a.Client NOT IN (
-
-                    SELECT
-
-                        ta.Client
-
-                    FROM
-
-                        TerminatedAgreements ta
-
+var sqlQuery = @"
+                    SELECT  
+                        cm.Code, 
+                        cm.Branch, 
+                        cm.Name, 
+                        ISNULL(ci.ID, 0)          AS ID, 
+                        ISNULL(ci.InvoiceNo, '')   AS InvoiceNo,
+                        ISNULL(ci.Note, '')        AS Note,
+                        ag.ID                      AS AgreementID,
+                        ag.WorkPlace
+                    FROM Agreement ag
+                    JOIN ClientMaster cm
+                        ON cm.Code    = ag.Client
+                        AND cm.Branch = ag.Branch
+                    LEFT JOIN ClientInvoice ci
+                        ON ci.AgreementID  = ag.ID
+                        AND ci.IsDeleted   = 'N'
+                        AND MONTH(ci.InvoiceDate) = @InvoiceMonth
+                        AND YEAR(ci.InvoiceDate)  = @InvoiceYear
                     WHERE
-
-                        ta.Branch = @Branch
-
-                        AND ta.TerminationDate < DATEADD(month, DATEDIFF(month, 0, @InvoicePeriod), 0)
-
-                )
-
-        )
-
+                        ag.Branch   = @Branch
+                        AND ag.IsValid = 1
+                        AND ag.AgreementDate <= @InvoicePeriod
+                        AND ag.ID = (
+                            SELECT TOP 1 ag2.ID
+                            FROM Agreement ag2
+                            WHERE ag2.Branch       = ag.Branch
+                              AND ag2.Client       = ag.Client
+                              AND ag2.WorkPlace    = ag.WorkPlace
+                              AND ag2.IsValid      = 1
+                              AND ag2.AgreementDate <= @InvoicePeriod
+                            ORDER BY ag2.AgreementDate DESC, ag2.LASTUPDATE DESC
+                        )
+                        AND ag.Client NOT IN
+                        (
+                            SELECT ta.Client
+                            FROM TerminatedAgreements ta
+                            WHERE ta.Branch = @Branch
+                              AND ta.TerminationDate < DATEADD(month, DATEDIFF(month, 0, @InvoicePeriod), 0)
+                        )
+                    ORDER BY cm.Name, ag.WorkPlace
 ";
 
 
@@ -361,25 +263,53 @@ namespace OBMS.WebAPI.Controllers
 
                     bi.Name = item.Name;
 
+                    bi.WorkPlace = item.WorkPlace;
+
+                    bi.AgreementID = item.AgreementID;
+
 
 
                     if (item.ID == 0)
 
                     {
 
-                        var ag = GetAgreementAndDetailsByBranchInvoicePeriodAndClient(item.Branch, invoicePeriod, item.Code);
-
-                        if (ag.Result.Result is BadRequestObjectResult || ag.Result.Value == null)
+                        if (item.AgreementID.HasValue && item.AgreementID > 0)
 
                         {
 
-                            // Skip this client if agreement doesn't exist for the period
+                            var ag = GetAgreementDetailsByAgreementId(item.AgreementID.Value, item.Branch);
 
-                            continue;
+                            if (ag.Result.Result is BadRequestObjectResult || ag.Result.Value == null)
+
+                            {
+
+                                continue;
+
+                            }
+
+                            bi.data = ag.Result.Value;
 
                         }
 
-                        bi.data = ag.Result.Value;
+                        else
+
+                        {
+
+                            var ag = GetAgreementAndDetailsByBranchInvoicePeriodAndClient(item.Branch, invoicePeriod, item.Code);
+
+                            if (ag.Result.Result is BadRequestObjectResult || ag.Result.Value == null)
+
+                            {
+
+                                // Skip this client if agreement doesn't exist for the period
+
+                                continue;
+
+                            }
+
+                            bi.data = ag.Result.Value;
+
+                        }
 
                     }
 
@@ -571,6 +501,76 @@ namespace OBMS.WebAPI.Controllers
             return results;
 
 
+
+        }
+
+        [HttpGet]
+
+        [Route("GetAgreementDetailsByAgreementId")]
+
+        public async Task<ActionResult<Object>> GetAgreementDetailsByAgreementId(int agreementId, string branchId)
+
+        {
+
+            var results = new Dictionary<string, Object>();
+
+            var agreement = await _oBMSDbContext.Agreements
+
+                .Where(x => x.ID == agreementId)
+
+                .FirstOrDefaultAsync();
+
+            results.Add("agreement", agreement);
+
+            if (agreement != null)
+
+            {
+
+                var details = _oBMSDbContext.AgreementDetails
+
+                    .Where(x => x.AgreementID == agreementId)
+
+                    .ToList();
+
+                results.Add("agreementDetails", details);
+
+            }
+
+            var invoicePeriod = agreement?.AgreementDate ?? DateTime.Now;
+
+            if (invoicePeriod >= Convert.ToDateTime("2015-04-01"))
+
+            {
+
+                var sqlQ = @"SELECT ISNULL(MAX(CAST(INVOICENO AS INT))+1, 1) AS NEWCLIENTINVOICENO FROM CLIENTINVOICE WHERE BRANCH=@Branch AND InvoiceDate >= '2015-04-01T00:00:00.000'";
+
+                var result1 = await _oBMSDbContext.ClientInvoiceNoResult
+
+                    .FromSqlRaw(sqlQ, new Microsoft.Data.SqlClient.SqlParameter("@Branch", branchId))
+
+                    .FirstOrDefaultAsync();
+
+                results.Add("invoiceNo", result1?.NEWCLIENTINVOICENO ?? 1);
+
+            }
+
+            else
+
+            {
+
+                var sqlQ = @"SELECT ISNULL(MAX(CAST(INVOICENO AS INT))+1,1) AS NEWCLIENTINVOICENO FROM CLIENTINVOICE WHERE BRANCH=@Branch AND InvoiceDate < '2015-04-01 00:00:00.000'";
+
+                var result1 = await _oBMSDbContext.ClientInvoiceNoResult
+
+                    .FromSqlRaw(sqlQ, new Microsoft.Data.SqlClient.SqlParameter("@Branch", branchId))
+
+                    .FirstOrDefaultAsync();
+
+                results.Add("invoiceNo", result1?.NEWCLIENTINVOICENO ?? 1);
+
+            }
+
+            return results;
 
         }
 
@@ -1178,6 +1178,8 @@ namespace OBMS.WebAPI.Controllers
                                       DiscountAmount = ad != null ? ad.DiscountAmount : 0,
 
                                       DiscountHour = ad != null ? ad.DiscountHour : 0,
+                                      PerMonth = ad != null ? ad.PerMonth : 0,
+
 
                                       Description = ad != null ? ad.Description : "Security Services",
 
@@ -1484,9 +1486,9 @@ namespace OBMS.WebAPI.Controllers
 
                         units = displayedQty, // Number of Guards
 
-                        rate = displayedRate, // Monthly Rate per Guard
+                        rate = (decimal)d.PerMonth, // Rate from AgreementDetails.PerMonth
 
-                        amount = adjustedAmount, // Amount based on adjusted duties
+                        amount = (decimal)d.MonthTotal - (decimal)d.DiscountAmount, // MonthTotal minus DiscountAmount
 
                         originalAmount = (decimal)d.MonthTotal, // Original amount before discount
 
@@ -6129,6 +6131,10 @@ public class BatchInvoice
     public int ID { get; set; }
 
     public string InvoiceNo { get; set; }
+
+    public string? WorkPlace { get; set; }
+
+    public int? AgreementID { get; set; }
 
 
 
