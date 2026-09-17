@@ -385,7 +385,8 @@ var sqlQuery = @"
                             FROM Agreement 
                             WHERE Branch=@Branch AND Client=@Client 
                             AND AgreementDate <= @AgreementPeriod 
-                            AND (IsValid = 0 OR IsValid IS NULL OR (IsValid = 1 AND FORMAT(AgreementDate, 'yyyyMM') = FORMAT(@AgreementPeriod, 'yyyyMM')))
+                            AND FORMAT(AgreementDate, 'yyyyMM') <= FORMAT(@AgreementPeriod, 'yyyyMM') 
+                            AND FORMAT(AgreementEndDate, 'yyyyMM') >= FORMAT(@AgreementPeriod, 'yyyyMM')
                             ORDER BY AgreementDate DESC, LASTUPDATE DESC ";
 
 
@@ -671,50 +672,87 @@ var sqlQuery = @"
 
                 {
 
-                    // Fallback to basic details if join fails
+                    // Fallback: build rows from AgreementDetails so existing invoices
 
-                    var basicDetails = await _oBMSDbContext.ClientInvoiceDetails
-                        .Where(x => x.ClientInvoiceID == invoiceId)
-                        .ToListAsync();
+                    // can still be opened for editing when ClientInvoiceDetails are missing
 
+                    var agreementBasic = await (from ad in _oBMSDbContext.AgreementDetails
+                                                where ad.AgreementID == invoice.AgreementID
+                                                orderby ad.ID
+                                                select ad).ToListAsync();
 
-
-                    if (!basicDetails.Any())
+                    if (agreementBasic.Any())
                     {
 
-                        return NotFound(new { error = "No details found for this invoice" });
+                        detailsList = agreementBasic.Select(d => new
+                        {
+
+                            ID = 0,
+                            ClientInvoiceID = invoiceId,
+                            AgreementDetailID = d.ID,
+                            AgreementID = d.AgreementID,
+                            AgreementDate = d.AgreementDate,
+
+                            NoOfGuards = d.NoOfGuards,
+                            Rate = d.Rate,
+                            NoOfHours = d.NoOfHours,
+                            NoOfDays = d.NoOfDays,
+
+                            FollowCalender = d.FollowCalender,
+                            HasDiscount = d.HasDiscount,
+                            DiscountAmount = d.DiscountAmount,
+
+                            IsTaxable = d.IsTaxable,
+                            TaxAmount = d.TaxAmount,
+                            MonthTotal = d.MonthTotal,
+
+                            Description = d.Description,
+                            hsnSacCode = "9985"
+
+                        }).ToList() as dynamic;
 
                     }
-
-
-
-                    // Transform to the expected format
-
-                    detailsList = basicDetails.Select(d => new
+                    else
                     {
 
-                        d.ID,
-                        d.ClientInvoiceID,
-                        d.AgreementDetailID,
-                        d.AgreementID,
-                        d.AgreementDate,
+                        var basicDetails = await _oBMSDbContext.ClientInvoiceDetails
+                            .Where(x => x.ClientInvoiceID == invoiceId)
+                            .ToListAsync();
 
-                        d.NoOfGuards,
-                        d.Rate,
-                        d.MonthTotal,
-                        d.NoOfDays,
-                        d.NoOfHours,
-                        d.TaxAmount,
-                        d.IsTaxable,
+                        if (!basicDetails.Any())
+                        {
 
-                        d.FollowCalender,
-                        d.HasDiscount,
-                        d.DiscountAmount,
+                            return NotFound(new { error = "No details found for this invoice" });
 
-                        Description = "Security Services",
-                        hsnSacCode = "9985"
+                        }
 
-                    }).ToList() as dynamic;
+                        detailsList = basicDetails.Select(d => new
+                        {
+
+                            d.ID,
+                            d.ClientInvoiceID,
+                            d.AgreementDetailID,
+                            d.AgreementID,
+                            d.AgreementDate,
+
+                            d.NoOfGuards,
+                            d.Rate,
+                            d.MonthTotal,
+                            d.NoOfDays,
+                            d.NoOfHours,
+                            d.TaxAmount,
+                            d.IsTaxable,
+
+                            d.FollowCalender,
+                            d.HasDiscount,
+                            d.DiscountAmount,
+
+                            Description = "Security Services",
+                            hsnSacCode = "9985"
+
+                        }).ToList() as dynamic;
+
+                    }
 
                 }
 
@@ -1197,7 +1235,69 @@ var sqlQuery = @"
 
                 {
 
-                    return NotFound(new { error = "No details found for this invoice" });
+                    // Fallback: build rows from AgreementDetails so the report still generates
+
+                    // even when ClientInvoiceDetails are missing (partial/legacy saves)
+
+                    var fallbackQuery = from ad in _oBMSDbContext.AgreementDetails
+
+                                        join st in _oBMSDbContext.ServiceTypes on ad.Category equals st.ServiceName into stGroup
+
+                                        from st in stGroup.DefaultIfEmpty()
+
+                                        where ad.AgreementID == invoice.AgreementID
+
+                                        orderby ad.ID
+
+                                        select new
+
+                                        {
+
+                                            NoOfGuards = ad.NoOfGuards,
+
+                                            Rate = ad.Rate,
+
+                                            MonthTotal = ad.MonthTotal,
+
+                                            NoOfDays = ad.NoOfDays,
+
+                                            NoOfHours = ad.NoOfHours,
+
+                                            TaxAmount = ad.TaxAmount,
+
+                                            IsTaxable = ad.IsTaxable,
+
+                                            HasDiscount = ad.HasDiscount,
+
+                                            DiscountAmount = ad.DiscountAmount,
+
+                                            DiscountHour = ad.DiscountHour,
+
+                                            PerMonth = ad.PerMonth,
+
+                                            Description = ad.Description,
+
+                                            hsnSacCode = st != null ? (st.HSNCode ?? "998715") : "998715"
+
+                                        };
+
+                    var fallbackDetails = await fallbackQuery.ToListAsync();
+
+                    if (fallbackDetails.Any())
+
+                    {
+
+                        detailsList = fallbackDetails;
+
+                    }
+
+                    else
+
+                    {
+
+                        return NotFound(new { error = "No details found for this invoice" });
+
+                    }
 
                 }
 
@@ -1710,7 +1810,67 @@ var sqlQuery = @"
 
                 {
 
-                    return NotFound(new { error = "No details found for this invoice" });
+                    // Fallback: build rows from AgreementDetails so the report still generates
+
+                    // even when ClientInvoiceDetails are missing (partial/legacy saves)
+
+                    var fallbackQuery = from ad in _oBMSDbContext.AgreementDetails
+
+                                        join st in _oBMSDbContext.ServiceTypes on ad.Category equals st.ServiceName into stGroup
+
+                                        from st in stGroup.DefaultIfEmpty()
+
+                                        where ad.AgreementID == invoice.AgreementID
+
+                                        orderby ad.ID
+
+                                        select new
+
+                                        {
+
+                                            NoOfGuards = ad.NoOfGuards,
+
+                                            Rate = ad.Rate,
+
+                                            MonthTotal = ad.MonthTotal,
+
+                                            NoOfDays = ad.NoOfDays,
+
+                                            NoOfHours = ad.NoOfHours,
+
+                                            TaxAmount = ad.TaxAmount,
+
+                                            IsTaxable = ad.IsTaxable,
+
+                                            HasDiscount = ad.HasDiscount,
+
+                                            DiscountAmount = ad.DiscountAmount,
+
+                                            DiscountHour = ad.DiscountHour,
+
+                                            Description = ad.Description,
+
+                                            hsnSacCode = st != null ? (st.HSNCode ?? "998715") : "998715"
+
+                                        };
+
+                    var fallbackDetails = await fallbackQuery.ToListAsync();
+
+                    if (fallbackDetails.Any())
+
+                    {
+
+                        detailsList = fallbackDetails;
+
+                    }
+
+                    else
+
+                    {
+
+                        return NotFound(new { error = "No details found for this invoice" });
+
+                    }
 
                 }
 
@@ -2522,16 +2682,18 @@ var sqlQuery = @"
                                 .Where(a => a.ID == clientInvoiceRequestDto.AgreementID)
                                 .FirstOrDefaultAsync();
 
-                            if (agreement != null && agreement.IsValid == true)
-                            {
-                                var agreementMonth = agreement.AgreementDate.ToString("yyyyMM");
-                                var invoiceMonth = clientInvoiceRequestDto.InvoiceDate.ToString("yyyyMM");
-
-                                if (agreementMonth != invoiceMonth)
+if (agreement != null && agreement.IsValid == true)
                                 {
-                                    return BadRequest(new { error = $"Agreement for this period does not exist for client {clientInvoiceRequestDto.Client}. Unable to process invoice." });
+                                    var agreementMonth = agreement.AgreementDate.ToString("yyyyMM");
+                                    var agreementEndMonth = agreement.AgreementEndDate.ToString("yyyyMM");
+                                    var invoiceMonth = clientInvoiceRequestDto.InvoiceDate.ToString("yyyyMM");
+
+                                    if (string.CompareOrdinal(invoiceMonth, agreementMonth) < 0 ||
+                                        string.CompareOrdinal(invoiceMonth, agreementEndMonth) > 0)
+                                    {
+                                        return BadRequest(new { error = $"Invoice period is outside the agreement period for client {clientInvoiceRequestDto.Client}. Unable to process invoice." });
+                                    }
                                 }
-                            }
                         }
 
                         var clientInvoice = new ClientInvoice();
@@ -2783,11 +2945,13 @@ var sqlQuery = @"
                     if (agreement != null && agreement.IsValid == true)
                     {
                         var agreementMonth = agreement.AgreementDate.ToString("yyyyMM");
+                        var agreementEndMonth = agreement.AgreementEndDate.ToString("yyyyMM");
                         var invoiceMonth = clientInvoiceRequestDto.InvoiceDate.ToString("yyyyMM");
 
-                        if (agreementMonth != invoiceMonth)
+                        if (string.CompareOrdinal(invoiceMonth, agreementMonth) < 0 ||
+                            string.CompareOrdinal(invoiceMonth, agreementEndMonth) > 0)
                         {
-                            return BadRequest(new { error = "Agreement for this period does not exist. Unable to process invoice." });
+                            return BadRequest(new { error = "Invoice period is outside the agreement period. Unable to process invoice." });
                         }
                     }
                 }
