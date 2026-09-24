@@ -65,5 +65,8 @@ namespace OBMS.WebAPI.Models.Domain
         
         [StringLength(20)]
         public string? EPFAccountNumber { get; set; }
+
+        [StringLength(20)]
+        public string? IFSCCode { get; set; }
     }
 }

@@ -794,16 +794,14 @@ var sqlQuery = @"
 
                 var branchState = company?.State?.Trim() ?? "";
 
-                var clientBillingState = client?.BillingState?.Trim() ?? client?.State?.Trim() ?? "";
+                var clientBillingState = !string.IsNullOrWhiteSpace(client?.BillingState)
+                    ? client.BillingState.Trim()
+                    : client?.State?.Trim() ?? "";
 
                 // Debug logging
                 _logger.LogInformation($"GST Calculation Debug - Branch State: '{branchState}', Client Billing State: '{clientBillingState}'");
 
-                var isIntraState = !string.IsNullOrEmpty(branchState) &&
-
-                                   !string.IsNullOrEmpty(clientBillingState) &&
-
-                                   branchState.Equals(clientBillingState, StringComparison.OrdinalIgnoreCase);
+                var isIntraState = IsIntraState(branchState, clientBillingState);
 
                 _logger.LogInformation($"GST Calculation Debug - Is Intra-State: {isIntraState}");
 
@@ -900,6 +898,7 @@ var sqlQuery = @"
 
                     }
 
+                    var isLumpSum = d.NoOfGuards == 0 && d.Rate == 0;
 
 
                     // Display quantity as Number of Guards and Rate as Monthly Rate per Guard
@@ -930,7 +929,7 @@ var sqlQuery = @"
 
                         description = finalDescription,
 
-                        dutiesTaxes = d.NoOfDays.ToString("0"), // Days/Duties
+                        dutiesTaxes = isLumpSum ? "0" : d.NoOfDays.ToString("0"), // Days/Duties — 0 for Lump Sum
 
                         units = displayedQty, // Number of Guards
 
@@ -1027,7 +1026,7 @@ var sqlQuery = @"
 
                         bankAccount = company?.BankAccount ?? "",
 
-                        ifscCode = company?.BankBranch ?? "",
+                        ifscCode = company?.IFSCCode ?? "",
 
                         bankBranch = company?.BankBranch ?? "",
 
@@ -1401,7 +1400,9 @@ var sqlQuery = @"
 
                 var branchState = company?.State?.Trim() ?? "";
 
-                var clientBillingState = client?.BillingState?.Trim() ?? client?.State?.Trim() ?? "";
+                var clientBillingState = !string.IsNullOrWhiteSpace(client?.BillingState)
+                    ? client.BillingState.Trim()
+                    : client?.State?.Trim() ?? "";
 
 
 
@@ -1411,11 +1412,7 @@ var sqlQuery = @"
 
 
 
-                var isIntraState = !string.IsNullOrEmpty(branchState) &&
-
-                                   !string.IsNullOrEmpty(clientBillingState) &&
-
-                                   branchState.Equals(clientBillingState, StringComparison.OrdinalIgnoreCase);
+                var isIntraState = IsIntraState(branchState, clientBillingState);
 
 
 
@@ -1541,6 +1538,8 @@ var sqlQuery = @"
 
                     decimal displayedQty = (decimal)d.NoOfGuards;
 
+                    var isLumpSum = d.NoOfGuards == 0 && d.Rate == 0;
+
                     // Calculate adjusted duties (days) after discount
 
                     var originalDays = d.NoOfDays;
@@ -1578,7 +1577,7 @@ var sqlQuery = @"
 
                         description = finalDescription,
 
-                        dutiesTaxes = adjustedDays.ToString("0"), // Adjusted Days/Duties after discount
+                        dutiesTaxes = isLumpSum ? "0" : adjustedDays.ToString("0"), // Adjusted Days/Duties after discount; 0 for Lump Sum
 
                         originalDuties = originalDays.ToString("0"), // Original Days/Duties
 
@@ -1636,7 +1635,7 @@ var sqlQuery = @"
                 epf = company?.EPFAccountNumber ?? "",
                 bankName = company?.BankName ?? "",
                 bankAccount = company?.BankAccount ?? "",
-                ifscCode = company?.BankBranch ?? "",
+                ifscCode = company?.IFSCCode ?? "",
                 bankBranch = company?.BankBranch ?? "",
                 state = branchState,
                 cinNo = company?.TANNumber ?? "",
@@ -1951,7 +1950,9 @@ var sqlQuery = @"
 
                 var branchState = company?.State?.Trim() ?? "";
 
-                var clientBillingState = client?.BillingState?.Trim() ?? client?.State?.Trim() ?? "";
+                var clientBillingState = !string.IsNullOrWhiteSpace(client?.BillingState)
+                    ? client.BillingState.Trim()
+                    : client?.State?.Trim() ?? "";
 
 
 
@@ -1961,11 +1962,7 @@ var sqlQuery = @"
 
 
 
-                var isIntraState = !string.IsNullOrEmpty(branchState) &&
-
-                                   !string.IsNullOrEmpty(clientBillingState) &&
-
-                                   branchState.Equals(clientBillingState, StringComparison.OrdinalIgnoreCase);
+                var isIntraState = IsIntraState(branchState, clientBillingState);
 
 
 
@@ -2096,6 +2093,8 @@ var sqlQuery = @"
 
                     decimal displayedQty = (decimal)d.NoOfGuards;
 
+                    var isLumpSum = d.NoOfGuards == 0 && d.Rate == 0;
+
                     // Calculate adjusted duties (days) after discount
                     var originalDays = d.NoOfDays;
                     var discountDays = (d.HasDiscount && d.DiscountHour > 0) ? d.DiscountHour : 0;
@@ -2129,7 +2128,7 @@ var sqlQuery = @"
 
                         description = finalDescription,
 
-                        dutiesTaxes = adjustedDays.ToString("0"), // Adjusted Days/Duties after discount
+                        dutiesTaxes = isLumpSum ? "0" : adjustedDays.ToString("0"), // Adjusted Days/Duties after discount; 0 for Lump Sum
 
                         originalDuties = originalDays.ToString("0"), // Original Days/Duties
 
@@ -2221,7 +2220,7 @@ var sqlQuery = @"
 
                         bankAccount = company?.BankAccount ?? "",
 
-                        ifscCode = company?.BankBranch ?? "",
+                        ifscCode = company?.IFSCCode ?? "",
 
                         bankBranch = company?.BankBranch ?? "",
 
@@ -2400,6 +2399,23 @@ var sqlQuery = @"
         }
 
 
+
+        private bool IsIntraState(string branchState, string clientBillingState)
+        {
+            if (string.IsNullOrWhiteSpace(branchState) || string.IsNullOrWhiteSpace(clientBillingState))
+                return false;
+
+            var branchCode = GetStateCode(branchState);
+            var clientCode = GetStateCode(clientBillingState);
+
+            if (!string.IsNullOrEmpty(branchCode) && !string.IsNullOrEmpty(clientCode))
+                return branchCode == clientCode;
+
+            var normalizedBranchState = new string(branchState.Where(char.IsLetterOrDigit).ToArray());
+            var normalizedClientState = new string(clientBillingState.Where(char.IsLetterOrDigit).ToArray());
+
+            return normalizedBranchState.Equals(normalizedClientState, StringComparison.OrdinalIgnoreCase);
+        }
 
         private string GetStateCode(string stateName)
         {
@@ -5255,6 +5271,68 @@ if (agreement != null && agreement.IsValid == true)
 
             }
 
+        }
+
+
+
+        /// Returns the Separated Profit &amp; Loss report split into two sections:
+        ///   Section 1 - Operational P&amp;L (Sales/Income and Expenses only).
+        ///   Section 2 - Non-Operational Transactions (Contra, BU transfers, Internal, Adjustments).
+        /// </summary>
+        [HttpGet]
+
+        [Route("GetSeparatedProfitLoss")]
+
+        public ActionResult<SeparatedProfitLossResponseDto> GetSeparatedProfitLoss(
+            DateTime startDate, DateTime endDate, string branch = "")
+
+        {
+
+            try
+
+            {
+
+                var operationalRows = string.IsNullOrWhiteSpace(branch)
+                    ? SeparatedProfitLoss.GetList(startDate, endDate)
+                    : SeparatedProfitLoss.GetList(startDate, endDate, branch);
+
+                var operationalDtos = operationalRows.Select(x => new SeparatedProfitLossDto
+                {
+                    Month = x.Month,
+                    OperationalIncome = x.OperationalIncome,
+                    OperationalCN = x.OperationalCN,
+                    OperationalDiscount = x.OperationalDiscount,
+                    OperationalExpenses = x.OperationalExpenses,
+                    OperationalProfit = x.OperationalProfit
+                }).ToList();
+
+                var nonOperationalRows = string.IsNullOrWhiteSpace(branch)
+                    ? NonOperationalTransaction.GetList(startDate, endDate)
+                    : NonOperationalTransaction.GetList(startDate, endDate, branch);
+
+                var nonOperationalDtos = nonOperationalRows.Select(t => new NonOperationalTransactionDto
+                {
+                    Month = t.Month,
+                    Branch = t.Branch,
+                    ItemCategory = t.ItemCategory,
+                    PaymentPurpose = t.PaymentPurpose,
+                    Amount = t.Amount,
+                    TransactionNature = t.TransactionNature,
+                    TransactionDate = t.TransactionDate
+                }).ToList();
+
+                var result = new SeparatedProfitLossResponseDto
+                {
+                    OperationalPnL = operationalDtos,
+                    NonOperationalTransactions = nonOperationalDtos
+                };
+
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
         }
 
 

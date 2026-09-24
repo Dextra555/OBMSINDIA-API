@@ -3441,6 +3441,8 @@ var sqlQuery = @"
 
                     NoOfHours = invoiceCalculation.NoOfHours,
 
+                    DiscountDays = invoiceCalculation.DiscountDays,
+
                     Total = invoiceCalculation.Total
 
                 };

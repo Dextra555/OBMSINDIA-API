@@ -12,6 +12,7 @@ namespace OBMS.WebAPI.BusinessObjects
         private decimal dTaxAmount = 0;
         private decimal dNoOfDays = 0;
         private decimal dNoOfHours = 0;
+        private decimal dDiscountDays = 0;
         public decimal ServiceCharges
         {
             get { return dServiceCharges; }
@@ -31,6 +32,10 @@ namespace OBMS.WebAPI.BusinessObjects
         public decimal NoOfHours
         {
             get { return dNoOfHours; }
+        }
+        public decimal DiscountDays
+        {
+            get { return dDiscountDays; }
         }
         public decimal Total
         {
@@ -82,10 +87,14 @@ namespace OBMS.WebAPI.BusinessObjects
                     // Use MonthTotal from agreement to match agreement calculation exactly
                     dServiceCharges += oAgreementDetail.MonthTotal;
 
+                    // NoOfDays = Guards * Days (India uses Days, not Hours)
+                    dNoOfDays += oAgreementDetail.NoOfGuards * oAgreementDetail.NoOfDays;
+
                     dNoOfHours += oAgreementDetail.NoOfHours * oAgreementDetail.NoOfGuards * oAgreementDetail.NoOfDays;
                     if (oAgreementDetail.HasDiscount)
                     {
                         dDiscount += oAgreementDetail.DiscountAmount;
+                        dDiscountDays += oAgreementDetail.DiscountHour; // DiscountHour = Days in India
                     }
 
                     if (oAgreementDetail.IsTaxable)
