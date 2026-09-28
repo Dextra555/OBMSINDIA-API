@@ -111,12 +111,16 @@ FROM PaySlip
         ON EmploymentDetails.EMPPAY_CODE = EmployeeSalaryDetails.EMPFL_CODE 
     INNER JOIN Designation 
         ON Employee.DesignationId = Designation.DesignationId 
+    -- FIX: Join BranchMaster via Attendance.Branch (the branch this payslip was processed for)
+    -- instead of Employee.EMP_BRANCH_CODE (current branch).
+    -- Without this, transferred employees' historical payslips show the wrong branch
+    -- (their current branch after transfer, not the branch they worked in that period).
+    INNER JOIN Attendance
+        ON Attendance.EmployeeID = Employee.EMP_ID
+        AND MONTH(Attendance.Period) = MONTH(PaySlip.Period)
+        AND YEAR(Attendance.Period)  = YEAR(PaySlip.Period)
     INNER JOIN BranchMaster 
-        ON Employee.EMP_BRANCH_CODE = BranchMaster.Code 
-    INNER JOIN Attendance 
-        ON Attendance.EmployeeID = Employee.EMP_ID 
-    INNER JOIN AttendanceDetails 
-        ON AttendanceDetails.AttendanceID = Attendance.ID 
+        ON BranchMaster.Code = Attendance.Branch 
     INNER JOIN SalaryStructure 
         ON SalaryStructure.SalaryId = EmploymentDetails.SALARYLAB 
     -- Original TableClient subquery: gets client name per employee per period

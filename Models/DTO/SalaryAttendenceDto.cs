@@ -40,5 +40,12 @@
         public decimal? AttendanceAllowanceWorkingDays { get; set; }
         public decimal? WorkingDays { get; set; }
         public string? AttendanceAllowanceFollowCalendar { get; set; } = "N";
+
+        // Employee History — effective branch period dates.
+        // Populated from EmployeeHistory for the row that covers the selected attendance period branch.
+        // Emp_StartDate = when this employee started at the current branch (NULL = not a transferred employee).
+        // Emp_EndDate   = when this employee left the current branch (NULL = currently active here).
+        public DateTime? Emp_StartDate { get; set; }
+        public DateTime? Emp_EndDate { get; set; }
     }
 }

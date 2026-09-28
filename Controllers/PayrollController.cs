@@ -1268,7 +1268,7 @@ namespace OBMS.WebAPI.Controllers
 
         [Route("GetEmployeeDetails")]
 
-        public async Task<ActionResult<List<SalaryAttendenceDto>>> GetEmployeeDetails(string branchCode, string employeeNo)
+        public async Task<ActionResult<List<SalaryAttendenceDto>>> GetEmployeeDetails(string branchCode, string employeeNo, DateTime? attendancePeriod = null)
 
         {
 
@@ -1276,7 +1276,7 @@ namespace OBMS.WebAPI.Controllers
 
             {
 
-                var employeeList = await _payrollRepository.GetEmployeeDetails(branchCode, employeeNo);
+                var employeeList = await _payrollRepository.GetEmployeeDetails(branchCode, employeeNo, attendancePeriod);
 
                 return Ok(employeeList);
 

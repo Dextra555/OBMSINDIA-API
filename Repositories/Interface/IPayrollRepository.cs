@@ -37,7 +37,7 @@ namespace OBMS.WebAPI.Repositories.Interface
         Attendance AttendanceByEmployeeID(DateTime Period,int employeeID);
         Task<List<AttendanceDetails>> AttendanceDetailsByID(int Id);
         Task<List<AttendanceDetails>> GetAttendanceDetailsList(int AttendanceID);
-        Task<List<SalaryAttendenceDto>> GetEmployeeDetails(string branchCode, string employeeNo);
+        Task<List<SalaryAttendenceDto>> GetEmployeeDetails(string branchCode, string employeeNo, DateTime? attendancePeriod = null);
         bool IsSalaryProcessDoneForCurrentPeriod(string branch,string employeeType, DateTime dtPeriod);
         int CalculateAge(DateTime birthDate);
         List<string> GetEmployeeAttendanceList(DateTime period, string branch);

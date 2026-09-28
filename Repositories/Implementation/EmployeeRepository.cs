@@ -682,6 +682,11 @@ var employment = _oBMSDbContext.EmploymentDetails.AsNoTracking().Where(x => x.EM
                 //                              Emp_EndDate   = NULL (active)
 
                 DateTime effectiveDate = branchStartDate.Value.Date;
+                // Old branch row must end the day BEFORE the new branch starts.
+                // Malaysia uses: prevEndDate = transferDate.AddDays(-1)
+                // Bug fix: was setting Emp_EndDate = effectiveDate (same day),
+                // causing a 1-day overlap that made the employee appear in both branches.
+                DateTime prevEndDate = effectiveDate.AddDays(-1);
 
                 // First record rule: if the employee has no EmployeeHistory yet, seed it
                 // with Emp_StartDate = JOIN DATE so the first row always carries the join date.
@@ -703,7 +708,7 @@ var employment = _oBMSDbContext.EmploymentDetails.AsNoTracking().Where(x => x.EM
                         empEndDate:   null);
                 }
 
-                // ── Step 1: Close the current open row ──────────────────────
+                // ── Step 1: Close the current open row (end = day before transfer) ──
                 var openHistory = await _oBMSDbContext.EmployeeHistories
                     .Where(h => h.EMP_ID == employee.EMP_ID && h.Emp_EndDate == null)
                     .OrderByDescending(h => h.EMP_HISTORY_ID)
@@ -711,7 +716,7 @@ var employment = _oBMSDbContext.EmploymentDetails.AsNoTracking().Where(x => x.EM
 
                 if (openHistory != null)
                 {
-                    openHistory.Emp_EndDate = effectiveDate;
+                    openHistory.Emp_EndDate = prevEndDate;
                     _oBMSDbContext.EmployeeHistories.Update(openHistory);
                 }
 
@@ -722,7 +727,7 @@ var employment = _oBMSDbContext.EmploymentDetails.AsNoTracking().Where(x => x.EM
 
                 if (openSalaryHistory != null)
                 {
-                    openSalaryHistory.Emp_EndDate = effectiveDate;
+                    openSalaryHistory.Emp_EndDate = prevEndDate;
                     _oBMSDbContext.EmployeeSalaryDetailHistories.Update(openSalaryHistory);
                 }
 
@@ -733,7 +738,7 @@ var employment = _oBMSDbContext.EmploymentDetails.AsNoTracking().Where(x => x.EM
 
                 if (openEmploymentHistory != null)
                 {
-                    openEmploymentHistory.Emp_EndDate = effectiveDate;
+                    openEmploymentHistory.Emp_EndDate = prevEndDate;
                     _oBMSDbContext.EmploymentDetailsHistories.Update(openEmploymentHistory);
                 }
 
@@ -1088,6 +1093,11 @@ var employment = _oBMSDbContext.EmploymentDetails.AsNoTracking().Where(x => x.EM
                     empEndDate:   null);
             }
 
+            // Old branch row must end the day BEFORE the new branch starts.
+            // Bug fix: was setting Emp_EndDate = TRANSFER_DATE (same day as new branch start),
+            // causing a 1-day overlap. Malaysia uses prevEndDate = transferDate.AddDays(-1).
+            DateTime prevEndDate = employeeTransferDto.TRANSFER_DATE.Date.AddDays(-1);
+
             // Close the currently open EmployeeHistory row before inserting the new one
             var openHistory = await _oBMSDbContext.EmployeeHistories
                 .Where(h => h.EMP_ID == employee.EMP_ID && h.Emp_EndDate == null)
@@ -1096,8 +1106,7 @@ var employment = _oBMSDbContext.EmploymentDetails.AsNoTracking().Where(x => x.EM
 
             if (openHistory != null)
             {
-                // Emp_EndDate = the Transfer Date entered by the user (Effective Start Date)
-                openHistory.Emp_EndDate = employeeTransferDto.TRANSFER_DATE;
+                openHistory.Emp_EndDate = prevEndDate;
                 _oBMSDbContext.EmployeeHistories.Update(openHistory);
             }
 
@@ -1108,7 +1117,7 @@ var employment = _oBMSDbContext.EmploymentDetails.AsNoTracking().Where(x => x.EM
 
             if (openSalaryHistory != null)
             {
-                openSalaryHistory.Emp_EndDate = employeeTransferDto.TRANSFER_DATE;
+                openSalaryHistory.Emp_EndDate = prevEndDate;
                 _oBMSDbContext.EmployeeSalaryDetailHistories.Update(openSalaryHistory);
             }
 
@@ -1119,7 +1128,7 @@ var employment = _oBMSDbContext.EmploymentDetails.AsNoTracking().Where(x => x.EM
 
             if (openEmploymentHistory != null)
             {
-                openEmploymentHistory.Emp_EndDate = employeeTransferDto.TRANSFER_DATE;
+                openEmploymentHistory.Emp_EndDate = prevEndDate;
                 _oBMSDbContext.EmploymentDetailsHistories.Update(openEmploymentHistory);
             }
 
