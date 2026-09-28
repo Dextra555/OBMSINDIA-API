@@ -104,6 +104,9 @@ var app = builder.Build();
 app.UseSwagger();
 app.UseSwaggerUI();
 
+// Temporary: show full exception details for debugging
+app.UseDeveloperExceptionPage();
+
 // app.UseHttpsRedirection();
 
 app.UseCors(policy => policy.AllowAnyHeader().AllowAnyMethod().AllowAnyOrigin());

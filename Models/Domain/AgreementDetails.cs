@@ -5,8 +5,6 @@ namespace OBMS.WebAPI.Models.Domain
     [Table("AgreementDetails")]
     public class AgreementDetails
     {
-
-
         [Key]
         public int ID { get; set; }
 
@@ -68,7 +66,7 @@ namespace OBMS.WebAPI.Models.Domain
         public decimal MonthTotal { get; set; }
 
         [Required]
-        public int DiscountHour { get; set; }
+        public decimal DiscountHour { get; set; }
 
         [StringLength(50)]
         public string Category { get; set; }
@@ -77,8 +75,11 @@ namespace OBMS.WebAPI.Models.Domain
         public string Reason { get; set; }
 
         public decimal Basic { get; set; }
+
+        [Column("Da")]
         public decimal DA { get; set; }
-        public int Leaves { get; set; }
+
+        public decimal Leaves { get; set; }
         public decimal LeavesPercentage { get; set; }
         public decimal Allowance { get; set; }
         public decimal Bonus { get; set; }
@@ -105,7 +106,12 @@ namespace OBMS.WebAPI.Models.Domain
         public decimal TotalPlusStatutory { get; set; }
         public decimal TotalDirectCost { get; set; }
         public decimal MonthlyChargedCost { get; set; }
+
+        public int? ServiceTypeId { get; set; }
+
+        public int MonthDays { get; set; }
+
+        [StringLength(200)]
+        public string? AgreementType { get; set; }
     }
-
-
 }

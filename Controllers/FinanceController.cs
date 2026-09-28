@@ -609,7 +609,7 @@ var sqlQuery = @"
 
                 // Prepare data rows with a left join to handle missing agreement details gracefully
 
-                // and fetch HSN codes from ServiceType based on Category
+                // and fetch HSN codes from ServiceType based on ServiceTypeId (with name fallback)
 
                 var detailQuery = from d in _oBMSDbContext.ClientInvoiceDetails
 
@@ -617,9 +617,13 @@ var sqlQuery = @"
 
                                   from ad in adGroup.DefaultIfEmpty()
 
-                                  join st in _oBMSDbContext.ServiceTypes on ad.Category equals st.ServiceName into stGroup
+                                  join stById in _oBMSDbContext.ServiceTypes on ad.ServiceTypeId equals stById.Id into stByIdGroup
 
-                                  from st in stGroup.DefaultIfEmpty()
+                                  from stById in stByIdGroup.DefaultIfEmpty()
+
+                                  join stByName in _oBMSDbContext.ServiceTypes on ad.Description equals stByName.ServiceName into stByNameGroup
+
+                                  from stByName in stByNameGroup.DefaultIfEmpty()
 
                                   where d.ClientInvoiceID == invoiceId
 
@@ -658,7 +662,7 @@ var sqlQuery = @"
 
                                       Description = !string.IsNullOrEmpty(d.Description) ? d.Description : (ad != null ? ad.Description : "Security Services"),
 
-                                      hsnSacCode = st != null ? st.HSNCode : null,
+                                      hsnSacCode = stById != null ? stById.HSNCode : (stByName != null ? stByName.HSNCode : null),
 
                                   };
 
@@ -707,7 +711,7 @@ var sqlQuery = @"
                             MonthTotal = d.MonthTotal,
 
                             Description = d.Description,
-                            hsnSacCode = "9985"
+                            hsnSacCode = (string?)null
 
                         }).ToList() as dynamic;
 
@@ -748,7 +752,7 @@ var sqlQuery = @"
                             d.DiscountAmount,
 
                             Description = "Security Services",
-                            hsnSacCode = "9985"
+                            hsnSacCode = (string?)null
 
                         }).ToList() as dynamic;
 
@@ -823,7 +827,10 @@ var sqlQuery = @"
 
 
 
-                if (subtotal > 0)
+                // Use stored TaxAmount from agreement details (respects IsTaxable flag per line item).
+                // If IsTaxable is false for a detail, its TaxAmount is 0, so totalTaxFromDb will
+                // correctly be 0 and no tax rows will appear in the invoice.
+                if (totalTaxFromDb > 0)
 
                 {
 
@@ -831,11 +838,11 @@ var sqlQuery = @"
 
                     {
 
-                        // Same state: CGST 9% + SGST 9% = 18%
+                        // Same state: split stored tax 50/50 into CGST + SGST
 
-                        cgstAmount = subtotal * 0.09M;
+                        cgstAmount = totalTaxFromDb / 2;
 
-                        sgstAmount = subtotal * 0.09M;
+                        sgstAmount = totalTaxFromDb / 2;
 
                         cgstPct = 9;
 
@@ -847,9 +854,9 @@ var sqlQuery = @"
 
                     {
 
-                        // Different state: IGST 18%
+                        // Different state: full stored tax as IGST
 
-                        igstAmount = subtotal * 0.18M;
+                        igstAmount = totalTaxFromDb;
 
                         igstPct = 18;
 
@@ -978,7 +985,10 @@ var sqlQuery = @"
 
                         workOrderDate = GetWorkOrderDate(client?.Code ?? ""),
 
-                        sacCode = detailsList.FirstOrDefault()?.hsnSacCode ?? "9985",
+                        sacCode = string.Join(" / ", detailsList
+                            .Select(d => d.hsnSacCode)
+                            .Where(h => !string.IsNullOrEmpty(h))
+                            .Distinct()),
 
                         // Legacy support for basic invoice structure
 
@@ -1186,9 +1196,13 @@ var sqlQuery = @"
 
                                   from ad in adGroup.DefaultIfEmpty()
 
-                                  join st in _oBMSDbContext.ServiceTypes on ad.Category equals st.ServiceName into stGroup
+                                  join stById in _oBMSDbContext.ServiceTypes on ad.ServiceTypeId equals stById.Id into stByIdGroup
 
-                                  from st in stGroup.DefaultIfEmpty()
+                                  from stById in stByIdGroup.DefaultIfEmpty()
+
+                                  join stByName in _oBMSDbContext.ServiceTypes on ad.Description equals stByName.ServiceName into stByNameGroup
+
+                                  from stByName in stByNameGroup.DefaultIfEmpty()
 
                                   where d.ClientInvoiceID == invoiceId
 
@@ -1220,7 +1234,7 @@ var sqlQuery = @"
 
                                       Description = ad != null ? ad.Description : "Security Services",
 
-                                      hsnSacCode = st != null ? (st.HSNCode ?? "998715") : "998715"
+                                      hsnSacCode = stById != null ? (stById.HSNCode ?? (stByName != null ? stByName.HSNCode : null)) : (stByName != null ? stByName.HSNCode : null)
 
                                   };
 
@@ -1240,9 +1254,13 @@ var sqlQuery = @"
 
                     var fallbackQuery = from ad in _oBMSDbContext.AgreementDetails
 
-                                        join st in _oBMSDbContext.ServiceTypes on ad.Category equals st.ServiceName into stGroup
+                                        join stById in _oBMSDbContext.ServiceTypes on ad.ServiceTypeId equals stById.Id into stByIdGroup
 
-                                        from st in stGroup.DefaultIfEmpty()
+                                        from stById in stByIdGroup.DefaultIfEmpty()
+
+                                        join stByName in _oBMSDbContext.ServiceTypes on ad.Description equals stByName.ServiceName into stByNameGroup
+
+                                        from stByName in stByNameGroup.DefaultIfEmpty()
 
                                         where ad.AgreementID == invoice.AgreementID
 
@@ -1276,7 +1294,7 @@ var sqlQuery = @"
 
                                             Description = ad.Description,
 
-                                            hsnSacCode = st != null ? (st.HSNCode ?? "998715") : "998715"
+                                            hsnSacCode = stById != null ? (stById.HSNCode ?? (stByName != null ? stByName.HSNCode : null)) : (stByName != null ? stByName.HSNCode : null)
 
                                         };
 
@@ -1436,7 +1454,10 @@ var sqlQuery = @"
 
 
 
-                if (taxableValue > 0)
+                // Use stored TaxAmount from agreement details (respects IsTaxable flag per line item).
+                // If IsTaxable is false for a detail, its TaxAmount is 0, so totalTaxFromDb will
+                // correctly be 0 and no tax rows will appear in the invoice.
+                if (totalTaxFromDb > 0)
 
                 {
 
@@ -1444,11 +1465,11 @@ var sqlQuery = @"
 
                     {
 
-                        // Same state: CGST 9% + SGST 9% = 18% on taxable value
+                        // Same state: split stored tax 50/50 into CGST + SGST
 
-                        cgstAmount = taxableValue * 0.09M;
+                        cgstAmount = totalTaxFromDb / 2;
 
-                        sgstAmount = taxableValue * 0.09M;
+                        sgstAmount = totalTaxFromDb / 2;
 
                         cgstPct = 9;
 
@@ -1460,9 +1481,9 @@ var sqlQuery = @"
 
                     {
 
-                        // Different state: IGST 18% on taxable value
+                        // Different state: full stored tax as IGST
 
-                        igstAmount = taxableValue * 0.18M;
+                        igstAmount = totalTaxFromDb;
 
                         igstPct = 18;
 
@@ -1620,7 +1641,10 @@ var sqlQuery = @"
                 workOrderNoFormatted = GetWorkOrderNo(client?.Code ?? ""),
                 workOrderNoOriginal = GetWorkOrderNo(client?.Code ?? ""),
                 workOrderDate = GetWorkOrderDate(client?.Code ?? ""),
-                sacCode = detailsList.FirstOrDefault()?.hsnSacCode ?? "9985"
+                sacCode = string.Join(" / ", detailsList
+                    .Select(d => d.hsnSacCode)
+                    .Where(h => !string.IsNullOrEmpty(h))
+                    .Distinct())
             },
             company = new
             {
@@ -1763,9 +1787,13 @@ var sqlQuery = @"
 
                                   from ad in adGroup.DefaultIfEmpty()
 
-                                  join st in _oBMSDbContext.ServiceTypes on ad.Category equals st.ServiceName into stGroup
+                                  join stById in _oBMSDbContext.ServiceTypes on ad.ServiceTypeId equals stById.Id into stByIdGroup
 
-                                  from st in stGroup.DefaultIfEmpty()
+                                  from stById in stByIdGroup.DefaultIfEmpty()
+
+                                  join stByName in _oBMSDbContext.ServiceTypes on ad.Description equals stByName.ServiceName into stByNameGroup
+
+                                  from stByName in stByNameGroup.DefaultIfEmpty()
 
                                   where d.ClientInvoiceID == invoiceId
 
@@ -1795,7 +1823,7 @@ var sqlQuery = @"
 
                                       Description = ad != null ? ad.Description : "Security Services",
 
-                                      hsnSacCode = st != null ? (st.HSNCode ?? "998715") : "998715"
+                                      hsnSacCode = stById != null ? (stById.HSNCode ?? (stByName != null ? stByName.HSNCode : null)) : (stByName != null ? stByName.HSNCode : null)
 
                                   };
 
@@ -1815,9 +1843,13 @@ var sqlQuery = @"
 
                     var fallbackQuery = from ad in _oBMSDbContext.AgreementDetails
 
-                                        join st in _oBMSDbContext.ServiceTypes on ad.Category equals st.ServiceName into stGroup
+                                        join stById in _oBMSDbContext.ServiceTypes on ad.ServiceTypeId equals stById.Id into stByIdGroup
 
-                                        from st in stGroup.DefaultIfEmpty()
+                                        from stById in stByIdGroup.DefaultIfEmpty()
+
+                                        join stByName in _oBMSDbContext.ServiceTypes on ad.Description equals stByName.ServiceName into stByNameGroup
+
+                                        from stByName in stByNameGroup.DefaultIfEmpty()
 
                                         where ad.AgreementID == invoice.AgreementID
 
@@ -1849,7 +1881,7 @@ var sqlQuery = @"
 
                                             Description = ad.Description,
 
-                                            hsnSacCode = st != null ? (st.HSNCode ?? "998715") : "998715"
+                                            hsnSacCode = stById != null ? (stById.HSNCode ?? (stByName != null ? stByName.HSNCode : null)) : (stByName != null ? stByName.HSNCode : null)
 
                                         };
 
@@ -1986,7 +2018,10 @@ var sqlQuery = @"
 
 
 
-                if (taxableValue > 0)
+                // Use stored TaxAmount from agreement details (respects IsTaxable flag per line item).
+                // If IsTaxable is false for a detail, its TaxAmount is 0, so totalTaxFromDb will
+                // correctly be 0 and no tax rows will appear in the invoice.
+                if (totalTaxFromDb > 0)
 
                 {
 
@@ -1994,11 +2029,11 @@ var sqlQuery = @"
 
                     {
 
-                        // Same state: CGST 9% + SGST 9% = 18% on taxable value
+                        // Same state: split stored tax 50/50 into CGST + SGST
 
-                        cgstAmount = taxableValue * 0.09M;
+                        cgstAmount = totalTaxFromDb / 2;
 
-                        sgstAmount = taxableValue * 0.09M;
+                        sgstAmount = totalTaxFromDb / 2;
 
                         cgstPct = 9;
 
@@ -2010,9 +2045,9 @@ var sqlQuery = @"
 
                     {
 
-                        // Different state: IGST 18% on taxable value
+                        // Different state: full stored tax as IGST
 
-                        igstAmount = taxableValue * 0.18M;
+                        igstAmount = totalTaxFromDb;
 
                         igstPct = 18;
 
@@ -2186,7 +2221,10 @@ var sqlQuery = @"
 
                         workOrderDate = GetWorkOrderDate(client?.Code ?? ""),
 
-                        sacCode = detailsList.FirstOrDefault()?.hsnSacCode ?? "9985",
+                        sacCode = string.Join(" / ", detailsList
+                            .Select(d => d.hsnSacCode)
+                            .Where(h => !string.IsNullOrEmpty(h))
+                            .Distinct()),
 
                         supplyType = "Service",
 
@@ -2358,9 +2396,14 @@ var sqlQuery = @"
 
                     details = detailsList, // Alias for backward compatibility with frontend calculation logic
 
-                    // Indian Invoice specific data
+                    // Indian Invoice specific data - build dynamic HSN summary from actual service types
 
-                    hsnSummary = "998715 - Security Services",
+                    hsnSummary = string.Join(", ", detailsList
+                        .Where(d => !string.IsNullOrEmpty(d.hsnSacCode))
+                        .Select(d => d.hsnSacCode)
+                        .Distinct()
+                        .Select(code => code + " - " + (detailsList.FirstOrDefault(d => d.hsnSacCode == code)?.Description?.Split('(')[0].Trim() ?? "Service"))
+                    ),
 
                     taxRateSummary = isIntraState ? "9% CGST + 9% SGST" : "18% IGST",
 
@@ -5336,6 +5379,31 @@ if (agreement != null && agreement.IsValid == true)
         }
 
 
+
+        // ── Year-wise Profit & Loss ──────────────────────────────────────────
+        /// <summary>
+        /// Returns year-wise aggregated P&amp;L data for the range [fromYear, toYear].
+        /// The existing monthly reports are NOT affected by this endpoint.
+        /// Sales source  : VWSummaryProfitNLoss (same view used by GetList / GetListWithBranch).
+        /// Expense source: BranchPayments + BranchPaymentDetails (same filter as GetSeparatedProfitLoss).
+        /// </summary>
+        [HttpGet]
+        [Route("GetYearlyProfitLoss")]
+        public IActionResult GetYearlyProfitLoss(int fromYear, int toYear)
+        {
+            if (fromYear > toYear)
+                return BadRequest(new { message = "From Year cannot be greater than To Year." });
+
+            try
+            {
+                var result = YearlyProfitLoss.GetYearlyReport(fromYear, toYear);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { success = false, message = ex.Message });
+            }
+        }
 
         [HttpGet("GetByDateAndBranch")]
 

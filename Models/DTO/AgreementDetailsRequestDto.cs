@@ -17,7 +17,7 @@
         public bool IsTaxable { get; set; }
         public decimal TaxAmount { get; set; }
         public decimal MonthTotal { get; set; }
-        public int DiscountHour { get; set; }
+        public decimal DiscountHour { get; set; }
         public string Category { get; set; }
         public string Reason { get; set; }
         public int? ServiceTypeID { get; set; }
@@ -51,5 +51,8 @@
         public decimal TotalPlusStatutory { get; set; }
         public decimal TotalDirectCost { get; set; }
         public decimal MonthlyChargedCost { get; set; }
+
+        public int MonthDays { get; set; }
+        public string? AgreementType { get; set; }
     }
 }

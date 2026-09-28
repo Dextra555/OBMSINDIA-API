@@ -215,7 +215,9 @@ namespace OBMS.WebAPI.Controllers
                         // If creating a new row (WorkPlace/Date changed), all details go as new inserts
                         if (!createNewRow && detail.ID != 0)
                         {
-                            agreementDetail = _oBMSDbContext.AgreementDetails.Where(x => x.ID == detail.ID).FirstOrDefault();
+                            var existing = _oBMSDbContext.AgreementDetails.Where(x => x.ID == detail.ID).FirstOrDefault();
+                            if (existing != null)
+                                agreementDetail = existing;
                         }
 
                         // When creating new row, reset ID so EF Core inserts a new detail row
@@ -240,6 +242,12 @@ namespace OBMS.WebAPI.Controllers
                         agreementDetail.TaxAmount = detail.TaxAmount;
                         agreementDetail.Category = detail.Category;
                         agreementDetail.Reason = detail.Reason;
+                        agreementDetail.ServiceTypeId = detail.ServiceTypeID;
+                        // Keep Category in sync with Description for HSN lookup fallback
+                        if (string.IsNullOrEmpty(agreementDetail.Category) || agreementDetail.Category == "-")
+                        {
+                            agreementDetail.Category = detail.Description;
+                        }
                         agreementDetail.LASTUPDATE = DateTime.Now;
 
                         agreementDetail.Basic = detail.Basic;
@@ -271,6 +279,8 @@ namespace OBMS.WebAPI.Controllers
                         agreementDetail.TotalPlusStatutory = detail.TotalPlusStatutory;
                         agreementDetail.TotalDirectCost = detail.TotalDirectCost;
                         agreementDetail.MonthlyChargedCost = detail.MonthlyChargedCost;
+                        agreementDetail.MonthDays = detail.MonthDays;
+                        agreementDetail.AgreementType = detail.AgreementType ?? "N";
 
                         await _agreementRepository.saveAndUpdateAgreementDetails(agreementDetail);
                     }
@@ -281,8 +291,8 @@ namespace OBMS.WebAPI.Controllers
             }
             catch (Exception ex)
             {
-
-                throw;
+                var inner = ex.InnerException?.Message ?? ex.Message;
+                return StatusCode(500, new { Success = "Error", Message = inner });
             }
         }
 

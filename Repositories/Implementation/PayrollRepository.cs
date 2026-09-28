@@ -3889,7 +3889,12 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
 
-
+                    // Calculate actual days in the period month and subtract Absent days (Type = 7)
+                    int actualDays = DateTime.DaysInMonth(periodDate.Year, periodDate.Month);
+                    int absentDays = await _oBMSDbContext.AttendanceDetails
+                        .Where(ad => ad.AttendanceID == employeeData.attendance.ID && ad.Type == 7)
+                        .CountAsync();
+                    decimal totalWorkingDays = actualDays - absentDays;
 
                     return new
 
@@ -3914,6 +3919,10 @@ namespace OBMS.WebAPI.Repositories.Implementation
                         department = "Operations",
 
                         location = branch,
+
+                        actualDays = actualDays,
+
+                        totalWorkingDays = totalWorkingDays,
 
                         basicSalary = Math.Round(basicSalary, 2),
 
@@ -4055,7 +4064,12 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, "Tamil Nadu", periodDate);
 
-
+                    // Calculate actual days in the period month and subtract Absent days (Type = 7)
+                    int guard1ActualDays = DateTime.DaysInMonth(periodDate.Year, periodDate.Month);
+                    int guard1AbsentDays = await _oBMSDbContext.AttendanceDetails
+                        .Where(ad => ad.AttendanceID == guardData.attendance.ID && ad.Type == 7)
+                        .CountAsync();
+                    decimal guard1TotalWorkingDays = guard1ActualDays - guard1AbsentDays;
 
                     return new
 
@@ -4069,9 +4083,13 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                         location = branch,
 
-                        workingDays = 26,
+                        actualDays = guard1ActualDays,
 
-                        presentDays = 26,
+                        totalWorkingDays = guard1TotalWorkingDays,
+
+                        workingDays = guard1TotalWorkingDays,
+
+                        presentDays = guard1TotalWorkingDays,
 
                         basicSalary = Math.Round(basicSalary, 2),
 
@@ -4157,7 +4175,12 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, "Tamil Nadu", periodDate);
 
-
+                    // Calculate actual days in the period month and subtract Absent days (Type = 7)
+                    int guard2ActualDays = DateTime.DaysInMonth(periodDate.Year, periodDate.Month);
+                    int guard2AbsentDays = await _oBMSDbContext.AttendanceDetails
+                        .Where(ad => ad.AttendanceID == guardData.attendance.ID && ad.Type == 7)
+                        .CountAsync();
+                    decimal guard2TotalWorkingDays = guard2ActualDays - guard2AbsentDays;
 
                     return new
 
@@ -4171,9 +4194,13 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                         location = branch,
 
-                        workingDays = 26,
+                        actualDays = guard2ActualDays,
 
-                        presentDays = 26,
+                        totalWorkingDays = guard2TotalWorkingDays,
+
+                        workingDays = guard2TotalWorkingDays,
+
+                        presentDays = guard2TotalWorkingDays,
 
                         basicSalary = Math.Round(basicSalary, 2),
 
@@ -4263,7 +4290,12 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
 
-
+                    // Calculate actual days in the period month and subtract Absent days (Type = 7)
+                    int rbaActualDays = DateTime.DaysInMonth(periodDate.Year, periodDate.Month);
+                    int rbaAbsentDays = await _oBMSDbContext.AttendanceDetails
+                        .Where(ad => ad.AttendanceID == rbaData.attendance.ID && ad.Type == 7)
+                        .CountAsync();
+                    decimal rbaTotalWorkingDays = rbaActualDays - rbaAbsentDays;
 
                     return new
 
@@ -4277,9 +4309,13 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                         location = branch,
 
-                        workingDays = 26,
+                        actualDays = rbaActualDays,
 
-                        presentDays = 26,
+                        totalWorkingDays = rbaTotalWorkingDays,
+
+                        workingDays = rbaTotalWorkingDays,
+
+                        presentDays = rbaTotalWorkingDays,
 
                         basicSalary = Math.Round(basicSalary, 2),
 

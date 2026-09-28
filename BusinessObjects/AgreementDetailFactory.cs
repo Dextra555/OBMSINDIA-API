@@ -24,7 +24,7 @@ namespace OBMS.WebAPI.BusinessObjects
         protected decimal dMonthTotal;
         protected bool sHasDiscount;
         protected decimal dDiscountAmount;
-        protected int iDiscountHour;
+        protected decimal dDiscountHour;
         protected bool sIsTaxable;
         protected decimal dTaxAmount;
         protected DateTime dtLASTUPDATE;
@@ -221,15 +221,15 @@ namespace OBMS.WebAPI.BusinessObjects
             }
         }
 
-        public int DiscountHour
+        public decimal DiscountHour
         {
             get
             {
-                return iDiscountHour;
+                return dDiscountHour;
             }
             set
             {
-                iDiscountHour = value;
+                dDiscountHour = value;
             }
         }
 
@@ -307,7 +307,7 @@ namespace OBMS.WebAPI.BusinessObjects
                 .Build();
         }
 
-        public AgreementDetailFactory(decimal ID, decimal AgreementID, DateTime AgreementDate, string Client, string Branch, string Description, int NoOfGuards, decimal PerDay, decimal PerMonth, decimal Rate, decimal NoOfHours, decimal NoOfDays, bool FollowCalender, decimal MonthTotal, bool HasDiscount, decimal DiscountAmount, int DiscountHour, bool IsTaxable, decimal TaxAmount, DateTime LASTUPDATE, string Category, string Reason)
+        public AgreementDetailFactory(decimal ID, decimal AgreementID, DateTime AgreementDate, string Client, string Branch, string Description, int NoOfGuards, decimal PerDay, decimal PerMonth, decimal Rate, decimal NoOfHours, decimal NoOfDays, bool FollowCalender, decimal MonthTotal, bool HasDiscount, decimal DiscountAmount, decimal DiscountHour, bool IsTaxable, decimal TaxAmount, DateTime LASTUPDATE, string Category, string Reason)
         {
             dID = ID;
             dAgreementID = AgreementID;
@@ -325,7 +325,7 @@ namespace OBMS.WebAPI.BusinessObjects
             dMonthTotal = MonthTotal;
             sHasDiscount = HasDiscount;
             dDiscountAmount = DiscountAmount;
-            iDiscountHour = DiscountHour;
+            dDiscountHour = DiscountHour;
             sIsTaxable = IsTaxable;
             dTaxAmount = TaxAmount;
             dtLASTUPDATE = LASTUPDATE;
@@ -367,7 +367,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                     dr.GetDecimal(dr.GetOrdinal("MonthTotal")),
                                     dr.GetBoolean(dr.GetOrdinal("HasDiscount")),
                                     dr.GetDecimal(dr.GetOrdinal("DiscountAmount")),
-                                    dr.GetInt32(dr.GetOrdinal("DiscountHour")),
+                                    dr.GetDecimal(dr.GetOrdinal("DiscountHour")),
                                     dr.GetBoolean(dr.GetOrdinal("IsTaxable")),
                                     dr.GetDecimal(dr.GetOrdinal("TaxAmount")),
                                     dr.GetDateTime(dr.GetOrdinal("LASTUPDATE")),
@@ -417,7 +417,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                 dMonthTotal = dr.GetDecimal(dr.GetOrdinal("MonthTotal"));
                                 sHasDiscount = dr.GetBoolean(dr.GetOrdinal("HasDiscount"));
                                 dDiscountAmount = dr.GetDecimal(dr.GetOrdinal("DiscountAmount"));
-                                iDiscountHour = dr.GetInt32(dr.GetOrdinal("DiscountHour"));
+                                dDiscountHour = dr.GetDecimal(dr.GetOrdinal("DiscountHour"));
                                 sIsTaxable = dr.GetBoolean(dr.GetOrdinal("IsTaxable"));
                                 dTaxAmount = dr.GetDecimal(dr.GetOrdinal("TaxAmount"));
                                 dtLASTUPDATE = dr.GetDateTime(dr.GetOrdinal("LASTUPDATE"));
@@ -458,7 +458,7 @@ namespace OBMS.WebAPI.BusinessObjects
                     cmd.Parameters.AddWithValue("@MonthTotal", dMonthTotal);
                     cmd.Parameters.AddWithValue("@HasDiscount", sHasDiscount);
                     cmd.Parameters.AddWithValue("@DiscountAmount", dDiscountAmount);
-                    cmd.Parameters.AddWithValue("@DiscountHour", iDiscountHour);
+                    cmd.Parameters.AddWithValue("@DiscountHour", dDiscountHour);
                     cmd.Parameters.AddWithValue("@IsTaxable", sIsTaxable);
                     cmd.Parameters.AddWithValue("@TaxAmount", dTaxAmount);
                     cmd.Parameters.AddWithValue("@LASTUPDATE", dtLASTUPDATE);
@@ -501,7 +501,7 @@ namespace OBMS.WebAPI.BusinessObjects
                     cmd.Parameters.AddWithValue("@MonthTotal", dMonthTotal);
                     cmd.Parameters.AddWithValue("@HasDiscount", sHasDiscount);
                     cmd.Parameters.AddWithValue("@DiscountAmount", dDiscountAmount);
-                    cmd.Parameters.AddWithValue("@DiscountHour", iDiscountHour);
+                    cmd.Parameters.AddWithValue("@DiscountHour", dDiscountHour);
                     cmd.Parameters.AddWithValue("@IsTaxable", sIsTaxable);
                     cmd.Parameters.AddWithValue("@TaxAmount", dTaxAmount);
                     cmd.Parameters.AddWithValue("@LASTUPDATE", dtLASTUPDATE);

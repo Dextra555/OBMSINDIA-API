@@ -1700,7 +1700,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
 
 
-            return newClientCode.ToString("FWG000");
+            return "FWG" + newClientCode.ToString("000");
 
         }
 
