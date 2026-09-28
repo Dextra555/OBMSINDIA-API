@@ -2298,173 +2298,128 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
 
         public List<EmployeeDto> GetList(string branch, string employeeType, DateTime resignedDate, DateTime joinDate, DateTime attendancePeriod, string status)
-
         {
+            // attendancePeriod is used to resolve each employee's effective branch from
+            // EmploymentDetailsHistory so that transferred employees appear under the
+            // branch they were actually assigned to during that month.
+            bool hasPeriod = attendancePeriod.Year != 1;
+            DateTime firstDayOfMonth = hasPeriod ? new DateTime(attendancePeriod.Year, attendancePeriod.Month, 1) : DateTime.MinValue;
+            DateTime lastDayOfMonth  = hasPeriod ? new DateTime(attendancePeriod.Year, attendancePeriod.Month,
+                                           DateTime.DaysInMonth(attendancePeriod.Year, attendancePeriod.Month)) : DateTime.MaxValue;
 
-            var query = (from emp in _oBMSDbContext.Employees
+            var baseQuery = from emp in _oBMSDbContext.Employees
+                            join empDetails in _oBMSDbContext.EmploymentDetails on emp.EMP_CODE equals empDetails.EMPPAY_CODE
+                            join salaryDetails in _oBMSDbContext.EmployeeSalaryDetails on emp.EMP_CODE equals salaryDetails.EMPFL_CODE
+                            join attendance in _oBMSDbContext.Attendances on emp.EMP_ID equals attendance.EmployeeID
+                            join attendanceDetails in _oBMSDbContext.AttendanceDetails on attendance.ID equals attendanceDetails.AttendanceID
+                            // LEFT JOIN EmploymentDetailsHistory to get the effective branch for the selected period.
+                            // Employees with no history row fall back to their current EMP_BRANCH_CODE.
+                            join edh in _oBMSDbContext.EmploymentDetailsHistories
+                                on emp.EMP_ID equals edh.EMP_ID into edhGroup
+                            from edh in edhGroup
+                                .Where(h => h.Emp_StartDate <= lastDayOfMonth &&
+                                            (h.Emp_EndDate == null || h.Emp_EndDate >= firstDayOfMonth))
+                                .DefaultIfEmpty()
+                            select new
+                            {
+                                Employee         = emp,
+                                EmploymentDetail = empDetails,
+                                SalaryDetail     = salaryDetails,
+                                AttendancePeriod = attendance.Period,
+                                // Use history branch when available; fall back to current branch
+                                EffectiveBranch  = edh != null ? edh.EMPPAY_BRANCHCODE : emp.EMP_BRANCH_CODE
+                            };
 
-                         join empDetails in _oBMSDbContext.EmploymentDetails on emp.EMP_CODE equals empDetails.EMPPAY_CODE
-
-                         join salaryDetails in _oBMSDbContext.EmployeeSalaryDetails on emp.EMP_CODE equals salaryDetails.EMPFL_CODE
-
-                         join attendance in _oBMSDbContext.Attendances on emp.EMP_ID equals attendance.EmployeeID
-
-                         join attendanceDetails in _oBMSDbContext.AttendanceDetails on attendance.ID equals attendanceDetails.AttendanceID
-
-                         where emp.HasTransfered == false
-
-                         select new EmployeeDto
-
-                         {
-
-                             EMP_ID = emp.EMP_ID,
-
-                             EMP_ROLE = emp.EMP_ROLE,
-
-                             EMP_CODE = emp.EMP_CODE,
-
-                             EMP_NAME = emp.EMP_NAME,
-
-                             EMP_CLIENT = emp.EMP_CLIENT,
-
-                             EMP_ADDRESS1 = emp.EMP_ADDRESS1,
-
-                             EMP_ADDRESS2 = emp.EMP_ADDRESS2,
-
-                             EMP_POST_CODE = emp.EMP_POST_CODE,
-
-                             EMP_TOWN = emp.EMP_TOWN,
-
-                             EMP_STATE = emp.EMP_STATE,
-
-                             EMP_CITIZEN = emp.EMP_CITIZEN,
-
-                             EMP_CHECKLIST = emp.EMP_CHECKLIST,
-
-                             EMP_NATIONAL = emp.EMP_NATIONAL,
-
-                             EMP_PHONE = emp.EMP_PHONE,
-
-                             EMP_MOBILEPHONE = emp.EMP_MOBILEPHONE,
-
-                             EMP_HGH_EDU = emp.EMP_HGH_EDU,
-
-                             EMP_DATE_OF_BIRTH = emp.EMP_DATE_OF_BIRTH,
-
-                             EMP_IC_OLD = emp.EMP_IC_OLD,
-
-                             EMP_IC_NEW = emp.EMP_IC_NEW,
-
-                             EMP_IC_COLOR = emp.EMP_IC_COLOR,
-
-                             EMP_PASSPORT_NO = emp.EMP_PASSPORT_NO,
-
-                             EMP_SEX = emp.EMP_SEX,
-
-                             EMP_RACE = emp.EMP_RACE,
-
-                             EMP_MARTIAL_STATUS = emp.EMP_MARTIAL_STATUS,
-
-                             EMP_SPOUSE_NAME = emp.EMP_SPOUSE_NAME,
-
-                             EMP_SP_IC = emp.EMP_SP_IC,
-
-                             EMP_NO_CHILD = emp.EMP_NO_CHILD,
-
-                             EMP_SP_WORK = emp.EMP_SP_WORK,
-
-                             EMP_PER_NAME_CONTACT = emp.EMP_PER_NAME_CONTACT,
-
-                             EMP_CONTACT_ADDRESS1 = emp.EMP_CONTACT_ADDRESS1,
-
-                             EMP_CONTACT_ADDRESS2 = emp.EMP_CONTACT_ADDRESS2,
-
-                             EMP_CONTACT_POST_CODE = emp.EMP_CONTACT_POST_CODE,
-
-                             EMP_CONTACT_TOWN = emp.EMP_CONTACT_TOWN,
-
-                             EMP_CONTACT_STATE = emp.EMP_CONTACT_STATE,
-
-                             EMP_CONTACT_TELEPHONE = emp.EMP_CONTACT_TELEPHONE,
-
-                             EMP_BRANCH_CODE = emp.EMP_BRANCH_CODE,
-
-                             OldBranch = emp.OldBranch,
-
-                             TransferDate = emp.TransferDate,
-
-                             LASTUPDATE = emp.LASTUPDATE,
-
-                             NewSalaryStructure = emp.NewSalaryStructure,
-
-                             SalaryStructure1000_3h = emp.SalaryStructure1000_3h,
-
-                             EMPPAY_DATE_RESIGNED = empDetails.EMPPAY_DATE_RESIGNED,
-
-                             EMPPAY_DATE_JOINED = empDetails.EMPPAY_DATE_JOINED,
-
-                             TMPGUARD = salaryDetails.TMPGUARD,
-
-                             Period = attendance.Period
-
-
-
-                         }).Distinct();
-
-
-
-            // Apply filters based on parameters
-
+            // Branch filter — use history-aware effective branch
             if (!string.IsNullOrEmpty(branch))
-
-                query = query.Where(emp => emp.EMP_BRANCH_CODE == branch);
-
-
+                baseQuery = baseQuery.Where(x => x.EffectiveBranch == branch);
 
             if (!string.IsNullOrEmpty(employeeType))
-
             {
-
                 if (employeeType.Contains("TEMPORARY"))
-
-                    query = query.Where(emp => emp.TMPGUARD == false);
-
+                    baseQuery = baseQuery.Where(x => x.SalaryDetail.TMPGUARD == false);
                 if (employeeType == "TEMPORARYSTAFF")
-
-                    query = query.Where(emp => emp.EMP_ROLE.Contains("STAFF"));
-
+                    baseQuery = baseQuery.Where(x => x.Employee.EMP_ROLE.Contains("STAFF"));
                 else if (employeeType == "TEMPORARYGUARD")
-
-                    query = query.Where(emp => emp.EMP_ROLE.Contains("GUARD"));
-
+                    baseQuery = baseQuery.Where(x => x.Employee.EMP_ROLE.Contains("GUARD"));
                 else
-
-                    query = query.Where(emp => emp.EMP_ROLE.Contains(employeeType));
-
+                    baseQuery = baseQuery.Where(x => x.Employee.EMP_ROLE.Contains(employeeType));
             }
 
-
-
+            // ✅ BUG FIX: Previously resignedDate filter was commented out and joinDate filter
+            // was incorrectly nested inside the resignedDate block (no braces), causing resigned
+            // employees to always appear. Now: filter out employees whose resign date is before
+            // the attendance period, and only include employees who joined by the end of the month.
             if (resignedDate.Year != 1)
-
-                //query = query.Where(empDetails => (empDetails.EMPPAY_DATE_RESIGNED ?? new DateTime(2100, 1, 1)) >= resignedDate);
-
-                if (joinDate.Year != 1)
-
-                    query = query.Where(emp => emp.EMPPAY_DATE_JOINED <= joinDate);
+            {
+                baseQuery = baseQuery.Where(x =>
+                    x.EmploymentDetail.EMPPAY_DATE_RESIGNED == null ||
+                    x.EmploymentDetail.EMPPAY_DATE_RESIGNED.Value.Year == 1 ||
+                    x.EmploymentDetail.EMPPAY_DATE_RESIGNED >= resignedDate);
+            }
+            if (joinDate.Year != 1)
+                baseQuery = baseQuery.Where(x => x.EmploymentDetail.EMPPAY_DATE_JOINED <= joinDate);
 
             if (attendancePeriod.Year != 1)
+                baseQuery = baseQuery.Where(x => x.AttendancePeriod.Year == attendancePeriod.Year && x.AttendancePeriod.Month == attendancePeriod.Month);
 
-                query = query.Where(emp => emp.Period.Year == attendancePeriod.Year && emp.Period.Month == attendancePeriod.Month);
-
-
-
-            query = query.OrderBy(emp => emp.EMP_NAME);
-
-
+            var query = baseQuery
+                .OrderBy(x => x.Employee.EMP_NAME)
+                .Select(x => new EmployeeDto
+                {
+                    EMP_ID               = x.Employee.EMP_ID,
+                    EMP_ROLE             = x.Employee.EMP_ROLE,
+                    EMP_CODE             = x.Employee.EMP_CODE,
+                    EMP_NAME             = x.Employee.EMP_NAME,
+                    EMP_CLIENT           = x.Employee.EMP_CLIENT,
+                    EMP_ADDRESS1         = x.Employee.EMP_ADDRESS1,
+                    EMP_ADDRESS2         = x.Employee.EMP_ADDRESS2,
+                    EMP_POST_CODE        = x.Employee.EMP_POST_CODE,
+                    EMP_TOWN             = x.Employee.EMP_TOWN,
+                    EMP_STATE            = x.Employee.EMP_STATE,
+                    EMP_CITIZEN          = x.Employee.EMP_CITIZEN,
+                    EMP_CHECKLIST        = x.Employee.EMP_CHECKLIST,
+                    EMP_NATIONAL         = x.Employee.EMP_NATIONAL,
+                    EMP_PHONE            = x.Employee.EMP_PHONE,
+                    EMP_MOBILEPHONE      = x.Employee.EMP_MOBILEPHONE,
+                    EMP_HGH_EDU          = x.Employee.EMP_HGH_EDU,
+                    EM_WORK_EXP          = x.Employee.EM_WORK_EXP,
+                    EMP_DATE_OF_BIRTH    = x.Employee.EMP_DATE_OF_BIRTH,
+                    EMP_IC_OLD           = x.Employee.EMP_IC_OLD,
+                    EMP_IC_NEW           = x.Employee.EMP_IC_NEW,
+                    EMP_IC_COLOR         = x.Employee.EMP_IC_COLOR,
+                    EMP_PASSPORT_NO      = x.Employee.EMP_PASSPORT_NO,
+                    EMP_SEX              = x.Employee.EMP_SEX,
+                    EMP_RACE             = x.Employee.EMP_RACE,
+                    EMP_MARTIAL_STATUS   = x.Employee.EMP_MARTIAL_STATUS,
+                    EMP_SPOUSE_NAME      = x.Employee.EMP_SPOUSE_NAME,
+                    EMP_FATHER_NAME      = x.Employee.EMP_FATHER_NAME,
+                    EMP_SP_IC            = x.Employee.EMP_SP_IC,
+                    EMP_NO_CHILD         = x.Employee.EMP_NO_CHILD,
+                    EMP_SP_WORK          = x.Employee.EMP_SP_WORK,
+                    EMP_PER_NAME_CONTACT = x.Employee.EMP_PER_NAME_CONTACT,
+                    EMP_CONTACT_ADDRESS1    = x.Employee.EMP_CONTACT_ADDRESS1,
+                    EMP_CONTACT_ADDRESS2    = x.Employee.EMP_CONTACT_ADDRESS2,
+                    EMP_CONTACT_POST_CODE   = x.Employee.EMP_CONTACT_POST_CODE,
+                    EMP_CONTACT_TOWN        = x.Employee.EMP_CONTACT_TOWN,
+                    EMP_CONTACT_STATE       = x.Employee.EMP_CONTACT_STATE,
+                    EMP_CONTACT_TELEPHONE   = x.Employee.EMP_CONTACT_TELEPHONE,
+                    // Return the current branch code for display; list is already
+                    // filtered by effective (history-aware) branch above.
+                    EMP_BRANCH_CODE      = x.Employee.EMP_BRANCH_CODE,
+                    OldBranch            = x.Employee.OldBranch,
+                    TransferDate         = x.Employee.TransferDate,
+                    LASTUPDATE           = x.Employee.LASTUPDATE,
+                    NewSalaryStructure   = x.Employee.NewSalaryStructure,
+                    SalaryStructure1000_3h = x.Employee.SalaryStructure1000_3h,
+                    EMPPAY_DATE_RESIGNED = x.EmploymentDetail.EMPPAY_DATE_RESIGNED,
+                    EMPPAY_DATE_JOINED   = x.EmploymentDetail.EMPPAY_DATE_JOINED,
+                    TMPGUARD             = x.SalaryDetail.TMPGUARD,
+                    Period               = x.AttendancePeriod
+                })
+                .Distinct();
 
             return query.ToList();
-
         }
 
         //public List<EmployeeDto> getListByEmployee(string branch, string employeeType, DateTime resignedDate, DateTime joinDate, string status)
