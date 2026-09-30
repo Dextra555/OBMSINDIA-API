@@ -4310,6 +4310,7 @@ if (agreement != null && agreement.IsValid == true)
                         {
                             if (detail.Amount != 0)
                             {
+                                // Current Payment > 0 : save or update the record
                                 var branchPaymentDetails = new BranchPaymentDetails();
                                 if (detail.ID != 0)
                                 {
@@ -4331,6 +4332,20 @@ if (agreement != null && agreement.IsValid == true)
                                 }
                                 else
                                 {
+                                    _oBMSDbContext.BranchPaymentDetails.Update(branchPaymentDetails);
+                                }
+                            }
+                            else if (detail.ID != 0)
+                            {
+                                // Current Payment = 0 : soft-delete the existing record so it
+                                // does not appear in the OFT Payment Voucher report
+                                var branchPaymentDetails = _oBMSDbContext.BranchPaymentDetails
+                                    .Where(x => x.ID == detail.ID).FirstOrDefault();
+                                if (branchPaymentDetails != null)
+                                {
+                                    branchPaymentDetails.IsDeleted = true;
+                                    branchPaymentDetails.LastUpdate = DateTime.Now;
+                                    branchPaymentDetails.LastUpdatedBy = branchPaymentRequestDto.userId;
                                     _oBMSDbContext.BranchPaymentDetails.Update(branchPaymentDetails);
                                 }
                             }
