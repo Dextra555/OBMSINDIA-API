@@ -48,6 +48,7 @@ namespace OBMS.WebAPI.BusinessObjects
 
         // ── Non-operational exclusion filter (WHERE clause fragment) ────────
         // ItemCategory and PaymentPurpose live on BranchPayments, NOT on the view.
+        // Also excludes rows whose InventoryCategory.Cat = 'O' (Trade Type = Other).
         private const string ExcludeNonOperational =
             "AND (bp.ItemCategory NOT LIKE '%Contra%'    OR bp.ItemCategory IS NULL) " +
             "AND (bp.ItemCategory NOT LIKE '%BU%'        OR bp.ItemCategory IS NULL) " +
@@ -55,7 +56,10 @@ namespace OBMS.WebAPI.BusinessObjects
             "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Contra%'     OR bp.PaymentPurpose IS NULL) " +
             "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Transfer%'   OR bp.PaymentPurpose IS NULL) " +
             "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Internal%'   OR bp.PaymentPurpose IS NULL) " +
-            "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Adjustment%' OR bp.PaymentPurpose IS NULL) ";
+            "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Adjustment%' OR bp.PaymentPurpose IS NULL) " +
+            // Exclude Trade Type = Other (Cat = 'O') from operational expenses
+            "AND ISNULL((SELECT TOP 1 ic.Cat FROM InventoryCategory ic " +
+            "            WHERE ic.ID = TRY_CAST(bp.ItemCategory AS INT)), '') <> 'O' ";
 
         // ── Month-label CASE expression ──────────────────────────────────────
         private const string MonthLabel =
