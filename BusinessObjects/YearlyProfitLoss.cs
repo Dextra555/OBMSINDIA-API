@@ -37,6 +37,7 @@ namespace OBMS.WebAPI.BusinessObjects
 
         // ── Non-operational exclusion (mirrors SeparatedProfitLoss filter) ──────
         // Also excludes rows whose InventoryCategory.Cat = 'O' (Trade Type = Other).
+        // Also excludes rows whose InventoryCategory.Name = 'CONTRA' (Category Master).
         private const string ExcludeNonOperational =
             "AND (bp.ItemCategory NOT LIKE '%Contra%'    OR bp.ItemCategory IS NULL) " +
             "AND (bp.ItemCategory NOT LIKE '%BU%'        OR bp.ItemCategory IS NULL) " +
@@ -45,6 +46,9 @@ namespace OBMS.WebAPI.BusinessObjects
             "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Transfer%'   OR bp.PaymentPurpose IS NULL) " +
             "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Internal%'   OR bp.PaymentPurpose IS NULL) " +
             "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Adjustment%' OR bp.PaymentPurpose IS NULL) " +
+            // Exclude Category Master name containing 'Contra' (e.g. category named 'CONTRA')
+            "AND ISNULL((SELECT TOP 1 ic3.Name FROM InventoryCategory ic3 " +
+            "            WHERE ic3.ID = TRY_CAST(bp.ItemCategory AS INT)), '') NOT LIKE '%Contra%' " +
             // Exclude Trade Type = Other (Cat = 'O') from operational expenses
             "AND ISNULL((SELECT TOP 1 ic3.Cat FROM InventoryCategory ic3 " +
             "            WHERE ic3.ID = TRY_CAST(bp.ItemCategory AS INT)), '') <> 'O' ";
@@ -60,6 +64,7 @@ namespace OBMS.WebAPI.BusinessObjects
 
         // ── Include ONLY non-operational (Others) rows ────────────────────────
         // Also includes any row whose InventoryCategory.Cat = 'O' (Trade Type = Other).
+        // Also includes rows whose InventoryCategory.Name = 'CONTRA' (Category Master).
         private const string IncludeNonOperational =
             "AND ( " +
             "    bp.ItemCategory LIKE '%Contra%' " +
@@ -81,6 +86,8 @@ namespace OBMS.WebAPI.BusinessObjects
             "    OR ISNULL(ic.Name, '') LIKE '%Reimbursement%' " +
             "    OR ISNULL(ic.Name, '') LIKE '%FD%' " +
             "    OR ISNULL(ic.Name, '') LIKE '%FWG%' " +
+            // Include Category Master name containing 'Contra' (e.g. category named 'CONTRA')
+            "    OR ISNULL(ic.Name, '') LIKE '%Contra%' " +
             // Include any category explicitly marked as Trade Type = Other (Cat = 'O')
             "    OR ISNULL((SELECT TOP 1 ic3.Cat FROM InventoryCategory ic3 " +
             "               WHERE ic3.ID = TRY_CAST(bp.ItemCategory AS INT)), '') = 'O' " +
@@ -401,6 +408,8 @@ namespace OBMS.WebAPI.BusinessObjects
                 "    OR ISNULL(ic.Name, '') LIKE '%Reimbursement%' " +
                 "    OR ISNULL(ic.Name, '') LIKE '%FD%' " +
                 "    OR ISNULL(ic.Name, '') LIKE '%FWG%' " +
+                // Include Category Master name containing 'Contra' (e.g. category named 'CONTRA')
+                "    OR ISNULL(ic.Name, '') LIKE '%Contra%' " +
                 // Include any category explicitly marked as Trade Type = Other (Cat = 'O')
                 "    OR ISNULL(ic.Cat, '') = 'O' " +
                 ") " +

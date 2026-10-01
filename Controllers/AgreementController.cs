@@ -297,7 +297,7 @@ namespace OBMS.WebAPI.Controllers
         }
 
         [HttpDelete("DeleteAgreementDetailById")]
-        public async Task<ActionResult<HttpResponseMessage>> DeleteAgreementDetailById(int Id)
+        public async Task<ActionResult<HttpResponseMessage>> DeleteAgreementDetailById([FromQuery(Name = "id")] int Id)
         {
             try
             {
@@ -688,7 +688,7 @@ namespace OBMS.WebAPI.Controllers
         }
 
         [HttpDelete("DeleteAgreementById")]
-        public async Task<IActionResult> DeleteAgreementById(int Id)
+        public async Task<IActionResult> DeleteAgreementById([FromQuery(Name = "id")] int Id)
         {
             try
             {
