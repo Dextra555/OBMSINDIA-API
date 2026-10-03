@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -2150,7 +2150,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
                     result.Statistics.ProcessingTime = DateTime.UtcNow - startTime;
 
                     result.Message = result.FailedRecords == 0
-                        ? $"✓ Successfully processed all {result.SuccessfulRecords} records in {result.Statistics.ProcessingTime.TotalSeconds:F2} seconds"
+                        ? $"âœ“ Successfully processed all {result.SuccessfulRecords} records in {result.Statistics.ProcessingTime.TotalSeconds:F2} seconds"
                         : $"Partial success: {result.SuccessfulRecords} succeeded, {result.FailedRecords} failed out of {result.TotalRecords} records";
                     
                     result.Success = result.FailedRecords == 0;
@@ -3626,7 +3626,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var esiResult = _esiCalculationService.CalculateESI(grossSalary, periodDate);
 
-                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, "Tamil Nadu", periodDate);
+                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, employeeData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
                     var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
 
@@ -3803,7 +3803,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var esiResult = _esiCalculationService.CalculateESI(grossSalary, periodDate);
 
-                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, "Tamil Nadu", periodDate);
+                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, guardData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
                     // Calculate actual days in the period month and subtract Absent days (Type = 7)
                     int guard1ActualDays = DateTime.DaysInMonth(periodDate.Year, periodDate.Month);
@@ -3914,7 +3914,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var esiResult = _esiCalculationService.CalculateESI(grossSalary, periodDate);
 
-                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, "Tamil Nadu", periodDate);
+                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, guardData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
                     // Calculate actual days in the period month and subtract Absent days (Type = 7)
                     int guard2ActualDays = DateTime.DaysInMonth(periodDate.Year, periodDate.Month);
@@ -4027,7 +4027,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var esiResult = _esiCalculationService.CalculateESI(grossSalary, periodDate);
 
-                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, "Tamil Nadu", periodDate);
+                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, rbaData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
                     var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
 
