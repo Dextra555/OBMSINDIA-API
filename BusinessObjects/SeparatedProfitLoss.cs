@@ -47,19 +47,14 @@ namespace OBMS.WebAPI.BusinessObjects
         }
 
         // ── Non-operational exclusion filter (WHERE clause fragment) ────────
-        // ItemCategory and PaymentPurpose live on BranchPayments, NOT on the view.
-        // Also excludes rows whose InventoryCategory.Cat = 'O' (Trade Type = Other).
+        // Only Cat='U' (Expenses) rows appear in Expenses section.
+        // CONTRA is always excluded regardless of Trade Type.
         private const string ExcludeNonOperational =
-            "AND (bp.ItemCategory NOT LIKE '%Contra%'    OR bp.ItemCategory IS NULL) " +
-            "AND (bp.ItemCategory NOT LIKE '%BU%'        OR bp.ItemCategory IS NULL) " +
-            "AND (bp.ItemCategory NOT LIKE '%Transfer%'  OR bp.ItemCategory IS NULL) " +
-            "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Contra%'     OR bp.PaymentPurpose IS NULL) " +
-            "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Transfer%'   OR bp.PaymentPurpose IS NULL) " +
-            "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Internal%'   OR bp.PaymentPurpose IS NULL) " +
-            "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Adjustment%' OR bp.PaymentPurpose IS NULL) " +
-            // Exclude Trade Type = Other (Cat = 'O') from operational expenses
-            "AND ISNULL((SELECT TOP 1 ic.Cat FROM InventoryCategory ic " +
-            "            WHERE ic.ID = TRY_CAST(bp.ItemCategory AS INT)), '') <> 'O' ";
+            "AND ISNULL((SELECT TOP 1 ic2.Cat FROM InventoryCategory ic2 " +
+            "            WHERE ic2.ID = TRY_CAST(bp.ItemCategory AS INT)), '') = 'U' " +
+            // CONTRA must never appear in Expenses regardless of Trade Type
+            "AND ISNULL((SELECT TOP 1 ic2.Name FROM InventoryCategory ic2 " +
+            "            WHERE ic2.ID = TRY_CAST(bp.ItemCategory AS INT)), '') NOT LIKE '%Contra%' ";
 
         // ── Month-label CASE expression ──────────────────────────────────────
         private const string MonthLabel =

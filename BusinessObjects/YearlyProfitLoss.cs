@@ -35,63 +35,30 @@ namespace OBMS.WebAPI.BusinessObjects
                 .Build();
         }
 
-        // ── Non-operational exclusion (mirrors SeparatedProfitLoss filter) ──────
-        // Also excludes rows whose InventoryCategory.Cat = 'O' (Trade Type = Other).
-        // Also excludes rows whose InventoryCategory.Name = 'CONTRA' (Category Master).
+        // ── Non-operational exclusion ─────────────────────────────────────────
+        // Only Cat='U' (Expenses) rows appear in Expenses section.
+        // CONTRA is always excluded regardless of Trade Type.
         private const string ExcludeNonOperational =
-            "AND (bp.ItemCategory NOT LIKE '%Contra%'    OR bp.ItemCategory IS NULL) " +
-            "AND (bp.ItemCategory NOT LIKE '%BU%'        OR bp.ItemCategory IS NULL) " +
-            "AND (bp.ItemCategory NOT LIKE '%Transfer%'  OR bp.ItemCategory IS NULL) " +
-            "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Contra%'     OR bp.PaymentPurpose IS NULL) " +
-            "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Transfer%'   OR bp.PaymentPurpose IS NULL) " +
-            "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Internal%'   OR bp.PaymentPurpose IS NULL) " +
-            "AND (CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) NOT LIKE '%Adjustment%' OR bp.PaymentPurpose IS NULL) " +
-            // Exclude Category Master name containing 'Contra' (e.g. category named 'CONTRA')
-            "AND ISNULL((SELECT TOP 1 ic3.Name FROM InventoryCategory ic3 " +
-            "            WHERE ic3.ID = TRY_CAST(bp.ItemCategory AS INT)), '') NOT LIKE '%Contra%' " +
-            // Exclude Trade Type = Other (Cat = 'O') from operational expenses
             "AND ISNULL((SELECT TOP 1 ic3.Cat FROM InventoryCategory ic3 " +
-            "            WHERE ic3.ID = TRY_CAST(bp.ItemCategory AS INT)), '') <> 'O' ";
+            "            WHERE ic3.ID = TRY_CAST(bp.ItemCategory AS INT)), '') = 'U' " +
+            // CONTRA must never appear in Expenses regardless of Trade Type
+            "AND ISNULL((SELECT TOP 1 ic3.Name FROM InventoryCategory ic3 " +
+            "            WHERE ic3.ID = TRY_CAST(bp.ItemCategory AS INT)), '') NOT LIKE '%Contra%' ";
 
         // ── Exclude Purchase-type categories from Expenses ────────────────────
-        // Category Master: Cat = 'P' means Purchase (should NOT appear in P&L Expenses).
-        //                  Cat = 'U' means Expenses/Utility (should appear in P&L Expenses).
-        // When ItemCategory is not a valid integer (no InventoryCategory join),
-        // we allow it through — only rows explicitly marked Cat='P' are excluded.
-        private const string ExcludePurchaseCategories =
-            "AND ISNULL((SELECT TOP 1 ic2.Cat FROM InventoryCategory ic2 " +
-            "            WHERE ic2.ID = TRY_CAST(bp.ItemCategory AS INT)), 'U') <> 'P' ";
+        // Kept for safety — ExcludeNonOperational already restricts to Cat='U',
+        // so Cat='P' rows are already excluded. This is a no-op in practice.
+        private const string ExcludePurchaseCategories = "";
 
-        // ── Include ONLY non-operational (Others) rows ────────────────────────
-        // Also includes any row whose InventoryCategory.Cat = 'O' (Trade Type = Other).
-        // Also includes rows whose InventoryCategory.Name = 'CONTRA' (Category Master).
+        // ── Include ONLY Others rows ──────────────────────────────────────────
+        // Rows whose Category Master Trade Type = 'O' (Other) go to the OTHERS
+        // section — EXCEPT 'CONTRA' which must never appear in any P&L section.
         private const string IncludeNonOperational =
-            "AND ( " +
-            "    bp.ItemCategory LIKE '%Contra%' " +
-            "    OR bp.ItemCategory LIKE '%BU%' " +
-            "    OR bp.ItemCategory LIKE '%Transfer%' " +
-            "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%Contra%' " +
-            "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%Transfer%' " +
-            "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%Internal%' " +
-            "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%Adjustment%' " +
-            "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%SST%' " +
-            "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%Accrual%' " +
-            "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%Loan%' " +
-            "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%Reimbursement%' " +
-            "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%FD Placement%' " +
-            "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%FWG Global%' " +
-            "    OR ISNULL(ic.Name, '') LIKE '%SST%' " +
-            "    OR ISNULL(ic.Name, '') LIKE '%Accrual%' " +
-            "    OR ISNULL(ic.Name, '') LIKE '%Loan%' " +
-            "    OR ISNULL(ic.Name, '') LIKE '%Reimbursement%' " +
-            "    OR ISNULL(ic.Name, '') LIKE '%FD%' " +
-            "    OR ISNULL(ic.Name, '') LIKE '%FWG%' " +
-            // Include Category Master name containing 'Contra' (e.g. category named 'CONTRA')
-            "    OR ISNULL(ic.Name, '') LIKE '%Contra%' " +
-            // Include any category explicitly marked as Trade Type = Other (Cat = 'O')
-            "    OR ISNULL((SELECT TOP 1 ic3.Cat FROM InventoryCategory ic3 " +
-            "               WHERE ic3.ID = TRY_CAST(bp.ItemCategory AS INT)), '') = 'O' " +
-            ") ";
+            "AND ISNULL((SELECT TOP 1 ic3.Cat FROM InventoryCategory ic3 " +
+            "            WHERE ic3.ID = TRY_CAST(bp.ItemCategory AS INT)), '') = 'O' " +
+            // CONTRA must never appear anywhere in the P&L report
+            "AND ISNULL((SELECT TOP 1 ic3.Name FROM InventoryCategory ic3 " +
+            "            WHERE ic3.ID = TRY_CAST(bp.ItemCategory AS INT)), '') NOT LIKE '%Contra%' ";
 
         /// <summary>
         /// Returns the full year-wise P&amp;L response for all branches combined,
@@ -367,54 +334,24 @@ namespace OBMS.WebAPI.BusinessObjects
         private static List<YearlyOthersDetailDto> QueryOthersDetails(
             DateTime startDate, DateTime endDate)
         {
-            // We select ALL non-operational BranchPayment rows grouped by year and
-            // category name.  "Non-operational" means it matches the exclusion filter
-            // that is applied to operational expenses (Contra/BU/Transfer/Internal/Adjustment)
-            // OR it is one of the known Others labels from the Excel.
-            //
-            // Strategy: instead of trying to replicate a complex OR filter in one pass,
-            // we fetch all BranchPayments rows that were EXCLUDED from expenses (i.e. NOT
-            // matching the operational ExcludeNonOperational fragment) and group them.
-            // In other words, rows where the NON-OPERATIONAL include condition fires.
+            // Fetch all rows whose Category Master Trade Type = 'O' (Other).
+            // This is purely driven by the Cat field — no hardcoded name lists.
+            // Admin changes in Category Master are reflected automatically.
 
             string sSQL =
                 "SELECT " +
-                "  YEAR(bp.PaymentDate)                                       AS PayYear, " +
-                "  ISNULL(ic.Name, CAST(ISNULL(bp.PaymentPurpose, bp.ItemCategory) AS NVARCHAR(200))) AS CategoryName, " +
-                "  SUM(bpd.Amount)                                            AS Amount " +
+                "  YEAR(bp.PaymentDate)                                    AS PayYear, " +
+                "  ISNULL(ic.Name, CAST(bp.ItemCategory AS NVARCHAR(100))) AS CategoryName, " +
+                "  SUM(bpd.Amount)                                         AS Amount " +
                 "FROM BranchPayments bp " +
                 "INNER JOIN BranchPaymentDetails bpd ON bpd.PaymentID = bp.ID " +
                 "LEFT  JOIN InventoryCategory ic      ON ic.ID = TRY_CAST(bp.ItemCategory AS INT) " +
                 "WHERE bp.IsDeleted = 0 " +
                 "AND ISNULL(bpd.IsDeleted, 0) = 0 " +
                 "AND bp.PaymentDate BETWEEN @StartDate AND @EndDate " +
-                "AND ( " +
-                "    bp.ItemCategory LIKE '%Contra%' " +
-                "    OR bp.ItemCategory LIKE '%BU%' " +
-                "    OR bp.ItemCategory LIKE '%Transfer%' " +
-                "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%Contra%' " +
-                "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%Transfer%' " +
-                "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%Internal%' " +
-                "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%Adjustment%' " +
-                "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%SST%' " +
-                "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%Accrual%' " +
-                "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%Loan%' " +
-                "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%Reimbursement%' " +
-                "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%FD Placement%' " +
-                "    OR CAST(bp.PaymentPurpose AS NVARCHAR(MAX)) LIKE '%FWG Global%' " +
-                "    OR ISNULL(ic.Name, '') LIKE '%SST%' " +
-                "    OR ISNULL(ic.Name, '') LIKE '%Accrual%' " +
-                "    OR ISNULL(ic.Name, '') LIKE '%Loan%' " +
-                "    OR ISNULL(ic.Name, '') LIKE '%Reimbursement%' " +
-                "    OR ISNULL(ic.Name, '') LIKE '%FD%' " +
-                "    OR ISNULL(ic.Name, '') LIKE '%FWG%' " +
-                // Include Category Master name containing 'Contra' (e.g. category named 'CONTRA')
-                "    OR ISNULL(ic.Name, '') LIKE '%Contra%' " +
-                // Include any category explicitly marked as Trade Type = Other (Cat = 'O')
-                "    OR ISNULL(ic.Cat, '') = 'O' " +
-                ") " +
+                IncludeNonOperational +
                 "GROUP BY YEAR(bp.PaymentDate), " +
-                "  ISNULL(ic.Name, CAST(ISNULL(bp.PaymentPurpose, bp.ItemCategory) AS NVARCHAR(200))) " +
+                "  ISNULL(ic.Name, CAST(bp.ItemCategory AS NVARCHAR(100))) " +
                 "ORDER BY CategoryName, PayYear ";
 
             var result = new List<YearlyOthersDetailDto>();

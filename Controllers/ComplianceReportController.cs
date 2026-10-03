@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 using System.Collections.Generic;
 
@@ -944,7 +944,7 @@ namespace OBMS.WebAPI.Controllers
 
                     designation = d.EMPPAY_JOB_TITLE ?? d.EMP_ROLE ?? "Security Guard",
 
-                    uan = d.UANNumber ?? "",
+                    uan = (!string.IsNullOrWhiteSpace(d.UANNumber) ? d.UANNumber : d.PFAccountNumber) ?? "",
 
                     esiNo = d.ESINumber ?? "",
 
@@ -1984,7 +1984,7 @@ namespace OBMS.WebAPI.Controllers
 
                         EMP_ID = (int)r.EMP_ID,
 
-                        uan = (string)r.pfAccount,   // PF Account Number is used as UAN in this system
+                        uan = (string)r.uan,   // UANNumber from Employee master
 
                         memberName = (string)r.name,
 
@@ -2064,6 +2064,58 @@ namespace OBMS.WebAPI.Controllers
 
 
 
+
+        // ─── PF Statement Text Export (ECR #~# format) ────────────────────────────────
+
+        [HttpPost("GetPFStatementTxt")]
+        public async Task<IActionResult> GetPFStatementTxt([FromBody] System.Text.Json.JsonElement body)
+        {
+            try
+            {
+                string period = "", branch = "", client = "";
+                ExtractParams(body, out period, out branch, out client);
+                if (string.IsNullOrEmpty(period)) period = DateTime.Now.ToString("yyyy-MM");
+
+                var (year, month, periodStart, periodEnd) = ParsePeriod(period);
+                var rows = await GetPayrollRows(branch, client, periodStart, periodEnd);
+
+                var sb = new System.Text.StringBuilder();
+                foreach (var (r, idx) in rows.Select((r, i) => (r, i)))
+                {
+                    int age = (int)(r.age ?? 0);
+                    bool isAbove55 = age >= 55;
+
+                    decimal grossWages              = (decimal)r.gross;
+                    decimal epfWages                = isAbove55 ? 0 : (decimal)r.epfWages;
+                    decimal epsWages                = isAbove55 ? 0 : (decimal)r.epsWages;
+                    decimal edliWages               = isAbove55 ? 0 : epfWages;
+                    decimal epfContributionRemitted = isAbove55 ? 0 : (decimal)r.employeeEPFShare;
+                    decimal epsContributionRemitted = isAbove55 ? 0 : (decimal)r.employerEPS;
+                    decimal epfDifference           = isAbove55 ? 0 : (decimal)r.employerEPF;
+                    decimal ncpDays                 = 0;
+                    decimal refundOfAdvances        = 0;
+
+                    string uan  = ((string)r.uan ?? "").Trim();
+                    string name = ((string)r.name ?? "").Trim();
+
+                    // ECR line: UAN#~#Name#~#Gross#~#EPFWages#~#EPSWages#~#EDLIWages#~#EPFContrib#~#EPSContrib#~#EPFDiff#~#NCPDays#~#Refund
+                    sb.AppendLine(
+                        $"{uan}#~#{name}#~#{(int)grossWages}#~#{(int)epfWages}#~#{(int)epsWages}#~#{(int)edliWages}" +
+                        $"#~#{(int)epfContributionRemitted}#~#{(int)epsContributionRemitted}#~#{(int)epfDifference}" +
+                        $"#~#{(int)ncpDays}#~#{(int)refundOfAdvances}"
+                    );
+                }
+
+                var bytes = System.Text.Encoding.UTF8.GetBytes(sb.ToString());
+                string monthName = new DateTime(year, month, 1).ToString("MMM");
+                string fileName = $"PF_ECR_{branch}_{monthName}{year}.txt";
+                return File(bytes, "text/plain", fileName);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
         // ─── Save UAN (existing UANNumber on Employee master — no new columns) ─────────
 
         // ─── ESI Statement ────────────────────────────────────────────────────────────
