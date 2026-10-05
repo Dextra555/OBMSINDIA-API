@@ -1,5 +1,6 @@
 using OBMS.WebAPI.Models.Domain;
 using OBMS.WebAPI.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace OBMS.WebAPI.Services
 {
@@ -147,6 +148,7 @@ namespace OBMS.WebAPI.Services
         private ESIConfiguration GetActiveESIConfiguration(DateTime calculationDate)
         {
             return _context.Set<ESIConfiguration>()
+                .AsNoTracking()
                 .Where(c => c.IsActive && c.EffectiveDate <= calculationDate)
                 .OrderByDescending(c => c.EffectiveDate)
                 .FirstOrDefault();

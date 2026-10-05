@@ -1,5 +1,6 @@
 using OBMS.WebAPI.Models.Domain;
 using OBMS.WebAPI.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace OBMS.WebAPI.Services
 {
@@ -191,6 +192,7 @@ namespace OBMS.WebAPI.Services
         private PFConfiguration GetActivePFConfiguration(DateTime calculationDate)
         {
             return _context.Set<PFConfiguration>()
+                .AsNoTracking()
                 .Where(c => c.IsActive && c.EffectiveDate <= calculationDate)
                 .OrderByDescending(c => c.EffectiveDate)
                 .FirstOrDefault();

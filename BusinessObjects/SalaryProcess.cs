@@ -3450,9 +3450,14 @@ namespace OBMS.WebAPI.BusinessObjects
                                                         0, MidpointRounding.AwayFromZero);
                                                 }
                                             }
-                                            catch
+                                            catch (Exception ptaxEx)
                                             {
-                                                // Non-fatal: if calculation fails, default all to 0
+                                                // Log the actual exception so we can diagnose
+                                                // PTax calculation failure — default to 0 (non-fatal)
+                                                System.Diagnostics.Debug.WriteLine(
+                                                    $"PTax calculation failed for EmployeeID={EmployeeID} " +
+                                                    $"State={sIndianState} EarnedSalary={dEarnedSalary}: " +
+                                                    $"{ptaxEx.GetType().Name}: {ptaxEx.Message}");
                                                 dPerDaySalary = 0;
                                                 dEarnedSalary = 0;
                                                 dPTax = 0;
