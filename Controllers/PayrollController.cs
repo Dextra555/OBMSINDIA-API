@@ -2981,6 +2981,42 @@ var sqlQuery = @"
 
         }
 
+        /// <summary>
+        /// Downloads the RBI Bank portal upload text file for salary payments.
+        /// 31 comma-separated fields per record, no header row — matches RBI portal upload format.
+        /// </summary>
+        [HttpGet]
+
+        [Route("GetRbiBankSalaryExportTxt")]
+
+        public IActionResult GetRbiBankSalaryExportTxt(string dtSalaryPeriod, string branch = "ALL", string employeeType = "ALL")
+
+        {
+
+            try
+
+            {
+
+                var exportData = _payrollRepository.GetRbiBankSalaryExportData(dtSalaryPeriod, branch, employeeType);
+
+                var txtBytes = RbiBankSalaryExport.GenerateTxtExportBytes(exportData);
+
+                var fileName = $"RBI_Bank_Salary_Export_{dtSalaryPeriod}_{branch}_{employeeType}.txt";
+
+                return File(txtBytes, "text/plain", fileName);
+
+            }
+
+            catch (Exception ex)
+
+            {
+
+                return StatusCode(500, $"Internal server error: {ex.Message}");
+
+            }
+
+        }
+
         [HttpGet]
 
         [Route("GetRbiBankAdvanceExport")]
@@ -3028,6 +3064,44 @@ var sqlQuery = @"
                 var fileName = $"RBI_Bank_Advance_Export_{dtSalaryPeriod}_{branch}_{employeeType}.csv";
 
                 return File(csvBytes, "text/csv", fileName);
+
+            }
+
+            catch (Exception ex)
+
+            {
+
+                return StatusCode(500, $"Internal server error: {ex.Message}");
+
+            }
+
+        }
+
+        /// <summary>
+        /// Downloads the RBI Bank portal upload text file for advance salary payments.
+        /// The file is formatted to the RBI NEFT bulk-upload specification:
+        /// no header row, 25 comma-delimited fields per record, CRLF line endings,
+        /// amounts to 2 decimal places, fields quoted where they contain commas.
+        /// </summary>
+        [HttpGet]
+
+        [Route("GetRbiBankAdvanceExportTxt")]
+
+        public IActionResult GetRbiBankAdvanceExportTxt(string dtSalaryPeriod, string branch = "ALL", string employeeType = "ALL")
+
+        {
+
+            try
+
+            {
+
+                var exportData = _payrollRepository.GetRbiBankAdvanceExportData(dtSalaryPeriod, branch, employeeType);
+
+                var txtBytes = RbiBankAdvanceExport.GenerateTxtExportBytes(exportData);
+
+                var fileName = $"RBI_Bank_Advance_Export_{dtSalaryPeriod}_{branch}_{employeeType}.txt";
+
+                return File(txtBytes, "text/plain", fileName);
 
             }
 

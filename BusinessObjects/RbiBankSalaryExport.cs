@@ -46,6 +46,7 @@ namespace OBMS.WebAPI.BusinessObjects
         public string BeneficiaryBankName { get; set; } = "";
         public string BeneficiaryBankBranchName { get; set; } = "";
         public string BeneficiaryEmailId { get; set; } = "";
+        public string Narration { get; set; } = "";  // e.g. "July Salary" — month name + Salary
 
         static RbiBankSalaryExport()
         {
@@ -68,6 +69,13 @@ namespace OBMS.WebAPI.BusinessObjects
             {
                 using (SqlCommand cmd = new SqlCommand())
                 {
+                    // Parse the period date to derive month name for Narration field
+                    DateTime selectedDate;
+                    if (!DateTime.TryParse(dtSalaryPeriod, out selectedDate))
+                    {
+                        selectedDate = DateTime.Now;
+                    }
+
                     string whereClause = " WHERE PaySlip.Period = @SalaryPeriod ";
                     
                     if (!string.IsNullOrEmpty(branch) && branch != "ALL")
@@ -82,7 +90,7 @@ namespace OBMS.WebAPI.BusinessObjects
 
                     cmd.CommandText = @"SELECT
                         Employee.EMP_CODE as BeneficiaryCode,
-                        EmployeeSalaryDetails.EMPFL_BK_ACCNO as BeneficiaryAccountNumber,
+                        ISNULL(NULLIF(EmployeeSalaryDetails.EMPFL_BK_ACCNO, ''), Employee.BankAccountNumber) as BeneficiaryAccountNumber,
                         Employee.EMP_NAME as BeneficiaryName,
                         PaySlip.BasicSalary + PaySlip.OverTimeSalary + PaySlip.OffDaySalary + PaySlip.OffDayOverTimeSalary +
                          PaySlip.HolidaySalary + PaySlip.HolidayOverTimeSalary + PaySlip.Shift2Salary +
@@ -91,7 +99,7 @@ namespace OBMS.WebAPI.BusinessObjects
                           PaySlip.MonthlyAdvanceRecovery + PaySlip.UniformIssueRecovery + PaySlip.LoanRecovery + PaySlip.MiscDeduction) as TransactionAmount,
                         Employee.EMP_ID as CustomerReferenceNumber,
                         EmployeeSalaryDetails.EMPFL_BRANCHCODE as PayerAddress1,
-                        Employee.IFSC_Code as IFSCCode,
+                        ISNULL(NULLIF(Employee.IFSC_Code, ''), Employee.BankIFSC) as IFSCCode,
                         ISNULL(Employee.BankName, BankMaster.Name) as BeneficiaryBankName,
                         ISNULL(Employee.BankBranch, '') as BeneficiaryBankBranchName,
                         ISNULL(BankMaster.Email, '') as BeneficiaryEmailId,
@@ -131,7 +139,7 @@ namespace OBMS.WebAPI.BusinessObjects
                             {
                                 var item = new RbiBankSalaryExport
                                 {
-                                    FieldType = "1",  // 1-NEFT
+                                    FieldType = "N",  // N = NEFT (RBI portal format)
                                     TransactionType = "SALARY",
                                     BeneficiaryCode = dr["BeneficiaryCode"]?.ToString() ?? "",
                                     BeneficiaryAccountNumber = dr["BeneficiaryAccountNumber"]?.ToString() ?? "",
@@ -151,11 +159,12 @@ namespace OBMS.WebAPI.BusinessObjects
                                     PayerAddress9 = "",
                                     PayerAddress10 = "",
                                     ChargeBearer = "OUR",
-                                    ValueDate = DateTime.Now.ToString("dd-MM-yyyy"),
+                                    ValueDate = DateTime.Now.ToString("dd/MM/yyyy"),  // DD/MM/YYYY — RBI portal format
                                     IFSCCode = dr["IFSCCode"]?.ToString() ?? "",
                                     BeneficiaryBankName = dr["BeneficiaryBankName"]?.ToString() ?? "",
                                     BeneficiaryBankBranchName = dr["BeneficiaryBankBranchName"]?.ToString() ?? "",
-                                    BeneficiaryEmailId = dr["BeneficiaryEmailId"]?.ToString() ?? ""
+                                    BeneficiaryEmailId = dr["BeneficiaryEmailId"]?.ToString() ?? "",
+                                    Narration = selectedDate.ToString("MMMM") + " Salary"  // e.g. "July Salary"
                                 };
                                 
                                 exportData.Add(item);
@@ -192,6 +201,105 @@ namespace OBMS.WebAPI.BusinessObjects
         {
             string csvContent = GenerateCsvExport(exportData);
             return System.Text.Encoding.UTF8.GetBytes(csvContent);
+        }
+
+        // -----------------------------------------------------------------------
+        // RBI Bank portal upload — text file format (Salary)
+        // -----------------------------------------------------------------------
+        // Exact 31-field layout — same as Advance export format:
+        //
+        //  Pos  Value                  Source
+        //  ---  ---------------------  ----------------------------------------
+        //   1   N                      FieldType (N = NEFT)
+        //   2   FREWA                  Fixed payer identifier (same for all records)
+        //   3   6309920673             BeneficiaryAccountNumber
+        //   4   3000                   TransactionAmount (whole number)
+        //   5   A L RAMASWAMY          BeneficiaryName
+        //  6–13 (empty x8)             —
+        //  14   July Salary            Narration (MMMM + " Salary")
+        // 15–23 (empty x9)             —
+        //  24   01/10/2026             ValueDate (DD/MM/YYYY)
+        //  25   (empty)                —
+        //  26   IDIB000E039            IFSCCode
+        // 27–28 (empty x2)             —
+        //  29   singam@fwg.my          BeneficiaryEmailId
+        // -----------------------------------------------------------------------
+
+        private static string EscapeField(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return string.Empty;
+
+            bool needsQuoting = value.IndexOf(',') >= 0
+                             || value.IndexOf('"') >= 0
+                             || value.IndexOf('\n') >= 0
+                             || value.IndexOf('\r') >= 0;
+
+            if (!needsQuoting)
+                return value;
+
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        }
+
+        private static string FormatTxtAmount(string amount)
+        {
+            if (decimal.TryParse(amount, out decimal d))
+                return Math.Truncate(d).ToString("0");
+            return amount;
+        }
+
+        /// <summary>
+        /// Generates the RBI Bank portal upload text file content for Salary payments.
+        /// 30 comma-separated fields per record, no header row, CRLF line endings, UTF-8 no BOM.
+        /// </summary>
+        public static string GenerateTxtExport(List<RbiBankSalaryExport> exportData)
+        {
+            var txt = new System.Text.StringBuilder();
+
+            foreach (var item in exportData)
+            {
+                string[] fields =
+                {
+                    // 1  — FieldType (N = NEFT)
+                    EscapeField(item.FieldType),
+                    // 2  — Fixed value "FREWA" for all records (RBI portal payer identifier)
+                    "FREWA",
+                    // 3  — Beneficiary Account Number
+                    EscapeField(item.BeneficiaryAccountNumber),
+                    // 4  — Transaction Amount (whole number)
+                    EscapeField(FormatTxtAmount(item.TransactionAmount)),
+                    // 5  — Beneficiary Name
+                    EscapeField(item.BeneficiaryName),
+                    // 6–13 — 8 empty fields
+                    "", "", "", "", "", "", "", "",
+                    // 14 — Narration (e.g. "July Salary")
+                    EscapeField(item.Narration),
+                    // 15–22 — 8 empty fields
+                    "", "", "", "", "", "", "", "",
+                    // 23 — Value Date (DD/MM/YYYY)
+                    EscapeField(item.ValueDate),
+                    // 24 — empty
+                    "",
+                    // 25 — IFSC Code
+                    EscapeField(item.IFSCCode),
+                    // 26–27 — 2 empty fields
+                    "", "",
+                    // 28 — Fixed email for all records
+                    "singam@fwg.my"
+                };
+
+                txt.Append(string.Join(",", fields));
+                txt.Append("\r\n");
+            }
+
+            return txt.ToString();
+        }
+
+        public static byte[] GenerateTxtExportBytes(List<RbiBankSalaryExport> exportData)
+        {
+            string txtContent = GenerateTxtExport(exportData);
+            return new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+                       .GetBytes(txtContent);
         }
     }
 }

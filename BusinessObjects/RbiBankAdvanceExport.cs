@@ -16,6 +16,7 @@ namespace OBMS.WebAPI.BusinessObjects
         public string CustomerReferenceNumber { get; set; } = "";
         public string PayerAccountNo { get; set; } = "";
         public string PayerName { get; set; } = "";
+        public string PayerCode { get; set; } = "";  // BranchMaster.Code — used as payer identifier in RBI txt upload
         public string PayerAddress1 { get; set; } = "";
         public string PayerAddress2 { get; set; } = "";
         public string PayerAddress3 { get; set; } = "";
@@ -46,6 +47,7 @@ namespace OBMS.WebAPI.BusinessObjects
         public string BeneficiaryBankName { get; set; } = "";
         public string BeneficiaryBankBranchName { get; set; } = "";
         public string BeneficiaryEmailId { get; set; } = "";
+        public string Narration { get; set; } = "";  // e.g. "August Advance" — month name + Advance
 
         static RbiBankAdvanceExport()
         {
@@ -89,17 +91,18 @@ namespace OBMS.WebAPI.BusinessObjects
 
                     string query = "SELECT " +
                     "e.EMP_CODE as BeneficiaryCode, " +
-                    "ISNULL(esd.EMPFL_BK_ACCNO, '') as BeneficiaryAccountNumber, " +
+                    "ISNULL(NULLIF(esd.EMPFL_BK_ACCNO, ''), e.BankAccountNumber) as BeneficiaryAccountNumber, " +
                     "e.EMP_NAME as BeneficiaryName, " +
                     "SUM(sa.Amount) as TransactionAmount, " +
                     "e.EMP_ID as CustomerReferenceNumber, " +
                     "ISNULL(esd.EMPFL_BRANCHCODE, '') as PayerAddress1, " +
-                    "ISNULL(e.IFSC_Code, '') as IFSCCode, " +
+                    "ISNULL(NULLIF(e.IFSC_Code, ''), e.BankIFSC) as IFSCCode, " +
                     "ISNULL(e.BankName, '') as BeneficiaryBankName, " +
                     "ISNULL(e.BankBranch, '') as BeneficiaryBankBranchName, " +
                     "ISNULL(bm.Email, '') as BeneficiaryEmailId, " +
                     "ISNULL(bm.BankAccount, '') as PayerAccountNo, " +
                     "ISNULL(bm.Name, '') as PayerName, " +
+                    "ISNULL(bm.Code, '') as PayerCode, " +
                     "ISNULL(bm.Address1, '') as PayerAddress2, " +
                     "ISNULL(bm.Address2, '') as PayerAddress3, " +
                     "ISNULL(bm.City, '') as PayerAddress4, " +
@@ -110,7 +113,7 @@ namespace OBMS.WebAPI.BusinessObjects
                     "LEFT JOIN EmployeeSalaryDetails esd ON e.EMP_CODE = esd.EMPFL_CODE " +
                     "LEFT JOIN BranchMaster bm ON e.EMP_BRANCH_CODE = bm.Code " +
                     whereClause +
-                    " GROUP BY e.EMP_CODE, esd.EMPFL_BK_ACCNO, e.EMP_NAME, e.EMP_ID, esd.EMPFL_BRANCHCODE, e.IFSC_Code, e.BankName, e.BankBranch, bm.Email, bm.BankAccount, bm.Name, bm.Address1, bm.Address2, bm.City, bm.State, bm.PostCode " +
+                    " GROUP BY e.EMP_CODE, esd.EMPFL_BK_ACCNO, e.BankAccountNumber, e.EMP_NAME, e.EMP_ID, esd.EMPFL_BRANCHCODE, e.IFSC_Code, e.BankIFSC, e.BankName, e.BankBranch, bm.Email, bm.BankAccount, bm.Name, bm.Code, bm.Address1, bm.Address2, bm.City, bm.State, bm.PostCode " +
                     "ORDER BY e.EMP_NAME ";
                     
                     cmd.CommandText = query;
@@ -137,7 +140,7 @@ namespace OBMS.WebAPI.BusinessObjects
                             {
                                 var item = new RbiBankAdvanceExport
                                 {
-                                    FieldType = "1",  // 1-NEFT
+                                    FieldType = "N",  // N = NEFT (RBI portal format)
                                     TransactionType = "ADVANCE",
                                     BeneficiaryCode = dr["BeneficiaryCode"]?.ToString() ?? "",
                                     BeneficiaryAccountNumber = dr["BeneficiaryAccountNumber"]?.ToString() ?? "",
@@ -146,6 +149,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                     CustomerReferenceNumber = dr["CustomerReferenceNumber"]?.ToString() ?? "",
                                     PayerAccountNo = dr["PayerAccountNo"]?.ToString() ?? "",
                                     PayerName = dr["PayerName"]?.ToString() ?? "",
+                                    PayerCode = dr["PayerCode"]?.ToString() ?? "",
                                     PayerAddress1 = dr["PayerAddress1"]?.ToString() ?? "",
                                     PayerAddress2 = dr["PayerAddress2"]?.ToString() ?? "",
                                     PayerAddress3 = dr["PayerAddress3"]?.ToString() ?? "",
@@ -157,11 +161,12 @@ namespace OBMS.WebAPI.BusinessObjects
                                     PayerAddress9 = "",
                                     PayerAddress10 = "",
                                     ChargeBearer = "OUR",
-                                    ValueDate = DateTime.Now.ToString("dd-MM-yyyy"),
+                                    ValueDate = DateTime.Now.ToString("dd/MM/yyyy"),  // DD/MM/YYYY — RBI portal format
                                     IFSCCode = dr["IFSCCode"]?.ToString() ?? "",
                                     BeneficiaryBankName = dr["BeneficiaryBankName"]?.ToString() ?? "",
                                     BeneficiaryBankBranchName = dr["BeneficiaryBankBranchName"]?.ToString() ?? "",
-                                    BeneficiaryEmailId = dr["BeneficiaryEmailId"]?.ToString() ?? ""
+                                    BeneficiaryEmailId = dr["BeneficiaryEmailId"]?.ToString() ?? "",
+                                    Narration = selectedDate.ToString("MMMM") + " Advance"  // e.g. "August Advance"
                                 };
                                 
                                 exportData.Add(item);
@@ -198,6 +203,136 @@ namespace OBMS.WebAPI.BusinessObjects
         {
             string csvContent = GenerateCsvExport(exportData);
             return System.Text.Encoding.UTF8.GetBytes(csvContent);
+        }
+
+        // -----------------------------------------------------------------------
+        // RBI Bank portal upload — text file format
+        // -----------------------------------------------------------------------
+        // Exact 31-field layout derived from actual RBI portal sample file:
+        //
+        //  Pos  Value                  Source
+        //  ---  ---------------------  ----------------------------------------
+        //   1   N                      FieldType (N = NEFT)
+        //   2   FREWA                  Fixed payer identifier (same for all records)
+        //   3   6309920673             BeneficiaryAccountNumber
+        //   4   3000                   TransactionAmount (whole number, no decimals)
+        //   5   A L RAMASWAMY          BeneficiaryName
+        //  6–13 (empty x8)             —
+        //  14   July Advance           Narration (MMMM + " Advance")
+        // 15–23 (empty x9)             —
+        //  24   01/10/2026             ValueDate (DD/MM/YYYY)
+        //  25   (empty)                —
+        //  26   IDIB000E039            IFSCCode
+        // 27–28 (empty x2)             —
+        //  29   singam@fwg.my          BeneficiaryEmailId
+        // -----------------------------------------------------------------------
+
+        /// <summary>
+        /// Wraps a field in double-quotes when it contains a comma, double-quote,
+        /// or newline, escaping any embedded double-quotes per RFC 4180.
+        /// </summary>
+        private static string EscapeField(string value)
+        {
+            if (string.IsNullOrEmpty(value))
+                return string.Empty;
+
+            bool needsQuoting = value.IndexOf(',') >= 0
+                             || value.IndexOf('"') >= 0
+                             || value.IndexOf('\n') >= 0
+                             || value.IndexOf('\r') >= 0;
+
+            if (!needsQuoting)
+                return value;
+
+            return "\"" + value.Replace("\"", "\"\"") + "\"";
+        }
+
+        /// <summary>
+        /// Formats amount as a whole number (no decimals) as seen in the RBI portal sample.
+        /// e.g. 10000.00 → "10000"
+        /// </summary>
+        private static string FormatTxtAmount(string amount)
+        {
+            if (decimal.TryParse(amount, out decimal d))
+                return Math.Truncate(d).ToString("0");
+            return amount;
+        }
+
+        /// <summary>
+        /// Generates the RBI Bank portal upload text file content.
+        /// Produces exactly 31 comma-separated fields per record, no header row,
+        /// CRLF line endings, UTF-8 no BOM — matches the actual RBI portal sample format.
+        ///
+        ///  Pos  Value                  Source
+        ///  ---  ---------------------  ----------------------------------------
+        ///   1   N                      FieldType (N = NEFT)
+        ///   2   FREWA                  Fixed payer identifier (same for all records)
+        ///   3   6309920673             BeneficiaryAccountNumber
+        ///   4   3000                   TransactionAmount (whole number)
+        ///   5   A L RAMASWAMY          BeneficiaryName
+        ///  6–13 (empty x8)             —
+        ///  14   July Advance           Narration (MMMM + " Advance")
+        /// 15–23 (empty x9)             —
+        ///  24   01/10/2026             ValueDate (DD/MM/YYYY)
+        ///  25   (empty)                —
+        ///  26   IDIB000E039            IFSCCode
+        /// 27–28 (empty x2)             —
+        ///  29   singam@fwg.my          BeneficiaryEmailId
+        /// </summary>
+        public static string GenerateTxtExport(List<RbiBankAdvanceExport> exportData)
+        {
+            var txt = new System.Text.StringBuilder();
+
+            foreach (var item in exportData)
+            {
+                // Pos 2: Fixed value "FREWA" for all records (RBI portal payer identifier)
+                string payerIdentifier = "FREWA";
+
+                string[] fields =
+                {
+                    // 1  — FieldType (N = NEFT)
+                    EscapeField(item.FieldType),
+                    // 2  — PayerCode-PayerName (e.g. "FWG001-Chennai")
+                    EscapeField(payerIdentifier),
+                    // 3  — Beneficiary Account Number
+                    EscapeField(item.BeneficiaryAccountNumber),
+                    // 4  — Transaction Amount (whole number)
+                    EscapeField(FormatTxtAmount(item.TransactionAmount)),
+                    // 5  — Beneficiary Name
+                    EscapeField(item.BeneficiaryName),
+                    // 6–13 — 8 empty fields
+                    "", "", "", "", "", "", "", "",
+                    // 14 — Narration (e.g. "July Advance")
+                    EscapeField(item.Narration),
+                    // 15–22 — 8 empty fields
+                    "", "", "", "", "", "", "", "",
+                    // 23 — Value Date (DD/MM/YYYY)
+                    EscapeField(item.ValueDate),
+                    // 24 — empty
+                    "",
+                    // 25 — IFSC Code
+                    EscapeField(item.IFSCCode),
+                    // 26–27 — 2 empty fields
+                    "", "",
+                    // 28 — Fixed email for all records
+                    "singam@fwg.my"
+                };
+
+                txt.Append(string.Join(",", fields));
+                txt.Append("\r\n");
+            }
+
+            return txt.ToString();
+        }
+
+        /// <summary>
+        /// Returns the RBI portal upload text file as a UTF-8 byte array (no BOM).
+        /// </summary>
+        public static byte[] GenerateTxtExportBytes(List<RbiBankAdvanceExport> exportData)
+        {
+            string txtContent = GenerateTxtExport(exportData);
+            return new System.Text.UTF8Encoding(encoderShouldEmitUTF8Identifier: false)
+                       .GetBytes(txtContent);
         }
     }
 }
