@@ -139,7 +139,7 @@ namespace OBMS.WebAPI.BusinessObjects
                             {
                                 var item = new RbiBankSalaryExport
                                 {
-                                    FieldType = "N",  // N = NEFT (RBI portal format)
+                                    FieldType = "N",  // N = NEFT — portal max 1 char (N/R)
                                     TransactionType = "SALARY",
                                     BeneficiaryCode = dr["BeneficiaryCode"]?.ToString() ?? "",
                                     BeneficiaryAccountNumber = dr["BeneficiaryAccountNumber"]?.ToString() ?? "",
@@ -163,7 +163,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                     IFSCCode = dr["IFSCCode"]?.ToString() ?? "",
                                     BeneficiaryBankName = dr["BeneficiaryBankName"]?.ToString() ?? "",
                                     BeneficiaryBankBranchName = dr["BeneficiaryBankBranchName"]?.ToString() ?? "",
-                                    BeneficiaryEmailId = dr["BeneficiaryEmailId"]?.ToString() ?? "",
+                                    BeneficiaryEmailId = "singam@fwg.my",
                                     Narration = selectedDate.ToString("MMMM") + " Salary"  // e.g. "July Salary"
                                 };
                                 
@@ -204,25 +204,24 @@ namespace OBMS.WebAPI.BusinessObjects
         }
 
         // -----------------------------------------------------------------------
-        // RBI Bank portal upload — text file format (Salary)
+        // Indian Bank Net Banking portal — text file format (Salary)
         // -----------------------------------------------------------------------
-        // Exact 31-field layout — same as Advance export format:
+        // Portal validates per column. Confirmed field layout from portal errors:
         //
-        //  Pos  Value                  Source
-        //  ---  ---------------------  ----------------------------------------
-        //   1   N                      FieldType (N = NEFT)
-        //   2   FREWA                  Fixed payer identifier (same for all records)
-        //   3   6309920673             BeneficiaryAccountNumber
-        //   4   3000                   TransactionAmount (whole number)
-        //   5   A L RAMASWAMY          BeneficiaryName
-        //  6–13 (empty x8)             —
-        //  14   July Salary            Narration (MMMM + " Salary")
-        // 15–23 (empty x9)             —
-        //  24   01/10/2026             ValueDate (DD/MM/YYYY)
-        //  25   (empty)                —
-        //  26   IDIB000E039            IFSCCode
-        // 27–28 (empty x2)             —
-        //  29   singam@fwg.my          BeneficiaryEmailId
+        //  Pos  Portal Column Name    Value / Source            Constraints
+        //  ---  --------------------  ------------------------  ------------------
+        //   1   Transaction Type      N                         max 1 char (N/R)
+        //   2   Payment Product       SAL                       max 3 chars
+        //   3   Debit Account         PayerAccountNo            company bank acc
+        //   4   Debit Amount          TransactionAmount         whole number
+        //   5   Chq/Txn Date          ValueDate (DD/MM/YYYY)    MANDATORY
+        //   6   Beneficiary Acc No    BeneficiaryAccountNumber
+        //   7   Beneficiary Name      BeneficiaryName
+        //   8   IFSC Code             IFSCCode                  uppercase, 11 chars
+        //   9   Beneficiary Bank      BeneficiaryBankName
+        //  10   Narration             Narration
+        //  11   Email                 BeneficiaryEmailId
+        //  12–28 (empty x17)          reserved / optional
         // -----------------------------------------------------------------------
 
         private static string EscapeField(string value)
@@ -249,8 +248,11 @@ namespace OBMS.WebAPI.BusinessObjects
         }
 
         /// <summary>
-        /// Generates the RBI Bank portal upload text file content for Salary payments.
-        /// 30 comma-separated fields per record, no header row, CRLF line endings, UTF-8 no BOM.
+        /// Generates the Indian Bank Net Banking portal upload text file for Salary payments.
+        /// 28 comma-separated fields per record, no header row, CRLF, UTF-8 no BOM.
+        /// Field layout confirmed from portal validation errors:
+        ///   1=N, 2=SAL, 3=DebitAcc, 4=Amount, 5=ChqDate(DD/MM/YYYY),
+        ///   6=BenefAccNo, 7=BenefName, 8=IFSC, 9=BankName, 10=Narration, 11=Email, 12-28=empty
         /// </summary>
         public static string GenerateTxtExport(List<RbiBankSalaryExport> exportData)
         {
@@ -260,32 +262,31 @@ namespace OBMS.WebAPI.BusinessObjects
             {
                 string[] fields =
                 {
-                    // 1  — FieldType (N = NEFT)
+                    // 1  — Transaction Type: N=NEFT, max 1 char
                     EscapeField(item.FieldType),
-                    // 2  — Fixed value "FREWA" for all records (RBI portal payer identifier)
-                    "FREWA",
-                    // 3  — Beneficiary Account Number
-                    EscapeField(item.BeneficiaryAccountNumber),
-                    // 4  — Transaction Amount (whole number)
+                    // 2  — Payment Product: SAL = Salary, max 3 chars
+                    "SAL",
+                    // 3  — Debit Account (company's bank account)
+                    EscapeField(item.PayerAccountNo),
+                    // 4  — Debit Amount (whole number)
                     EscapeField(FormatTxtAmount(item.TransactionAmount)),
-                    // 5  — Beneficiary Name
-                    EscapeField(item.BeneficiaryName),
-                    // 6–13 — 8 empty fields
-                    "", "", "", "", "", "", "", "",
-                    // 14 — Narration (e.g. "July Salary")
-                    EscapeField(item.Narration),
-                    // 15–22 — 8 empty fields
-                    "", "", "", "", "", "", "", "",
-                    // 23 — Value Date (DD/MM/YYYY)
+                    // 5  — Chq/Txn Date (DD/MM/YYYY) — MANDATORY
                     EscapeField(item.ValueDate),
-                    // 24 — empty
-                    "",
-                    // 25 — IFSC Code
-                    EscapeField(item.IFSCCode),
-                    // 26–27 — 2 empty fields
-                    "", "",
-                    // 28 — Fixed email for all records
-                    "singam@fwg.my"
+                    // 6  — Beneficiary Account Number
+                    EscapeField(item.BeneficiaryAccountNumber),
+                    // 7  — Beneficiary Name
+                    EscapeField(item.BeneficiaryName),
+                    // 8  — IFSC Code (uppercase, 11 chars)
+                    EscapeField(item.IFSCCode.ToUpper()),
+                    // 9  — Beneficiary Bank Name
+                    EscapeField(item.BeneficiaryBankName),
+                    // 10 — Narration (e.g. "September Salary")
+                    EscapeField(item.Narration),
+                    // 11 — Beneficiary Email
+                    EscapeField(item.BeneficiaryEmailId),
+                    // 12–28 — 17 reserved/optional empty fields
+                    "", "", "", "", "", "", "", "",
+                    "", "", "", "", "", "", "", "", ""
                 };
 
                 txt.Append(string.Join(",", fields));
