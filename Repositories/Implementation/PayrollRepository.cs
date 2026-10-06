@@ -1,4 +1,4 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 
 using Microsoft.EntityFrameworkCore;
 
@@ -1313,7 +1313,20 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                                 from history in historyGroup.OrderByDescending(h => h.Emp_StartDate).Take(1).DefaultIfEmpty()
 
-                                where employee.EMP_CODE == employeeNo && employee.EMP_BRANCH_CODE == branchCode
+                                // Branch check is done via the history join above (history-aware).
+                                // Do NOT filter on employee.EMP_BRANCH_CODE — that is the CURRENT branch
+                                // and would exclude transferred employees when querying old periods.
+                                // Instead, allow the record through if:
+                                //   a) a history row matched the branch+period (history != null), OR
+                                //   b) no history row exists yet (old-style transfer) and either
+                                //      the current branch matches OR OldBranch matches (transfer was after the period).
+                                where employee.EMP_CODE == employeeNo
+                                   && (history != null
+                                       || employee.EMP_BRANCH_CODE == branchCode
+                                       || (employee.HasTransfered == true
+                                           && employee.OldBranch == branchCode
+                                           && employee.TransferDate != null
+                                           && employee.TransferDate > periodEnd))
 
                                 select new SalaryAttendenceDto
 
@@ -2150,7 +2163,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
                     result.Statistics.ProcessingTime = DateTime.UtcNow - startTime;
 
                     result.Message = result.FailedRecords == 0
-                        ? $"✓ Successfully processed all {result.SuccessfulRecords} records in {result.Statistics.ProcessingTime.TotalSeconds:F2} seconds"
+                        ? $"âœ“ Successfully processed all {result.SuccessfulRecords} records in {result.Statistics.ProcessingTime.TotalSeconds:F2} seconds"
                         : $"Partial success: {result.SuccessfulRecords} succeeded, {result.FailedRecords} failed out of {result.TotalRecords} records";
                     
                     result.Success = result.FailedRecords == 0;
@@ -2312,13 +2325,22 @@ namespace OBMS.WebAPI.Repositories.Implementation
                             join salaryDetails in _oBMSDbContext.EmployeeSalaryDetails on emp.EMP_CODE equals salaryDetails.EMPFL_CODE
                             join attendance in _oBMSDbContext.Attendances on emp.EMP_ID equals attendance.EmployeeID
                             join attendanceDetails in _oBMSDbContext.AttendanceDetails on attendance.ID equals attendanceDetails.AttendanceID
-                            // LEFT JOIN EmploymentDetailsHistory to get the effective branch for the selected period.
-                            // Employees with no history row fall back to their current EMP_BRANCH_CODE.
+                            // LEFT JOIN EmploymentDetailsHistory: new-style branch history
                             join edh in _oBMSDbContext.EmploymentDetailsHistories
                                 on emp.EMP_ID equals edh.EMP_ID into edhGroup
                             from edh in edhGroup
                                 .Where(h => h.Emp_StartDate <= lastDayOfMonth &&
                                             (h.Emp_EndDate == null || h.Emp_EndDate >= firstDayOfMonth))
+                                .DefaultIfEmpty()
+                            // LEFT JOIN EmployeeHistory: older history table
+                            join eh in _oBMSDbContext.EmployeeHistories
+                                on emp.EMP_ID equals eh.EMP_ID into ehGroup
+                            from eh in ehGroup
+                                .Where(h => h.Emp_StartDate != null
+                                         && h.Emp_StartDate <= lastDayOfMonth
+                                         && (h.Emp_EndDate == null || h.Emp_EndDate >= firstDayOfMonth))
+                                .OrderByDescending(h => h.Emp_StartDate)
+                                .Take(1)
                                 .DefaultIfEmpty()
                             select new
                             {
@@ -2326,8 +2348,19 @@ namespace OBMS.WebAPI.Repositories.Implementation
                                 EmploymentDetail = empDetails,
                                 SalaryDetail     = salaryDetails,
                                 AttendancePeriod = attendance.Period,
-                                // Use history branch when available; fall back to current branch
-                                EffectiveBranch  = edh != null ? edh.EMPPAY_BRANCHCODE : emp.EMP_BRANCH_CODE
+                                // Priority:
+                                // 1. EmploymentDetailsHistory with closed end-date (real transfer row)
+                                // 2. EmployeeHistory row for the period
+                                // 3. OldBranch when transfer was after the period (legacy)
+                                // 4. Current EMP_BRANCH_CODE
+                                EffectiveBranch  =
+                                    (edh != null && edh.Emp_EndDate != null)
+                                        ? edh.EMPPAY_BRANCHCODE
+                                    : (eh != null
+                                        ? eh.EMP_BRANCH_CODE
+                                    : (emp.HasTransfered == true && emp.TransferDate != null && emp.TransferDate > lastDayOfMonth
+                                        ? emp.OldBranch
+                                        : emp.EMP_BRANCH_CODE))
                             };
 
             // Branch filter — use history-aware effective branch
@@ -2655,10 +2688,13 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
             // ---------------------------------------------------------------
             // Base query: join Employee → EmploymentDetails → EmployeeSalaryDetails
-            // Also LEFT JOIN EmploymentDetailsHistory to resolve the effective
-            // branch for the selected period.
-            // Employees who have no history row (pre-backfill edge case) still
-            // appear, falling back to their current EMP_BRANCH_CODE.
+            // Also LEFT JOIN EmploymentDetailsHistory AND EmployeeHistory to resolve
+            // the effective branch for the selected period.
+            // Priority:
+            //   1. EmploymentDetailsHistory row for the period  (new-style transfer)
+            //   2. EmployeeHistory row for the period           (older history table)
+            //   3. OldBranch when transfer happened AFTER the period (legacy Employee fields)
+            //   4. Current EMP_BRANCH_CODE as last resort
             // ---------------------------------------------------------------
             var baseQuery = from e in _oBMSDbContext.Employees
 
@@ -2666,9 +2702,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                             join esd in _oBMSDbContext.EmployeeSalaryDetails on e.EMP_CODE equals esd.EMPFL_CODE
 
-                            // History row that was active during the selected month:
-                            //   Emp_StartDate <= lastDayOfMonth
-                            //   AND (Emp_EndDate IS NULL OR Emp_EndDate >= firstDayOfMonth)
+                            // LEFT JOIN EmploymentDetailsHistory: new-style branch history
                             join edh in _oBMSDbContext.EmploymentDetailsHistories
                                 on e.EMP_ID equals edh.EMP_ID into edhGroup
 
@@ -2677,12 +2711,37 @@ namespace OBMS.WebAPI.Repositories.Implementation
                                             (h.Emp_EndDate == null || h.Emp_EndDate >= firstDayOfMonth))
                                 .DefaultIfEmpty()
 
+                            // LEFT JOIN EmployeeHistory: older history table (used by GetEmployeeDetails)
+                            join eh in _oBMSDbContext.EmployeeHistories
+                                on e.EMP_ID equals eh.EMP_ID into ehGroup
+
+                            from eh in ehGroup
+                                .Where(h => h.Emp_StartDate != null
+                                         && h.Emp_StartDate <= lastDayOfMonth
+                                         && (h.Emp_EndDate == null || h.Emp_EndDate >= firstDayOfMonth))
+                                .OrderByDescending(h => h.Emp_StartDate)
+                                .Take(1)
+                                .DefaultIfEmpty()
+
                             select new
                             {
                                 Employee         = e,
                                 EmploymentDetail = ed,
-                                // Use history branch when available; fall back to current branch
-                                EffectiveBranch  = edh != null ? edh.EMPPAY_BRANCHCODE : e.EMP_BRANCH_CODE
+                                // Priority order for effective branch resolution:
+                                // 1. EmploymentDetailsHistory (only if it has a closed Emp_EndDate,
+                                //    meaning it's a real transfer row — not just the seed row with EndDate=NULL
+                                //    that carries the wrong branch for old employees)
+                                // 2. EmployeeHistory row for the period
+                                // 3. OldBranch when transfer happened after the period (legacy)
+                                // 4. Current EMP_BRANCH_CODE
+                                EffectiveBranch  =
+                                    (edh != null && edh.Emp_EndDate != null)
+                                        ? edh.EMPPAY_BRANCHCODE
+                                    : (eh != null
+                                        ? eh.EMP_BRANCH_CODE
+                                    : (e.HasTransfered == true && e.TransferDate != null && e.TransferDate > lastDayOfMonth
+                                        ? e.OldBranch
+                                        : e.EMP_BRANCH_CODE))
                             };
 
             // ── Status filter ────────────────────────────────────────────────
@@ -3626,7 +3685,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var esiResult = _esiCalculationService.CalculateESI(grossSalary, periodDate);
 
-                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, "Tamil Nadu", periodDate);
+                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, employeeData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
                     var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
 
@@ -3803,7 +3862,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var esiResult = _esiCalculationService.CalculateESI(grossSalary, periodDate);
 
-                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, "Tamil Nadu", periodDate);
+                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, guardData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
                     // Calculate actual days in the period month and subtract Absent days (Type = 7)
                     int guard1ActualDays = DateTime.DaysInMonth(periodDate.Year, periodDate.Month);
@@ -3914,7 +3973,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var esiResult = _esiCalculationService.CalculateESI(grossSalary, periodDate);
 
-                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, "Tamil Nadu", periodDate);
+                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, guardData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
                     // Calculate actual days in the period month and subtract Absent days (Type = 7)
                     int guard2ActualDays = DateTime.DaysInMonth(periodDate.Year, periodDate.Month);
@@ -4027,7 +4086,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var esiResult = _esiCalculationService.CalculateESI(grossSalary, periodDate);
 
-                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, "Tamil Nadu", periodDate);
+                    var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, rbaData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
                     var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
 

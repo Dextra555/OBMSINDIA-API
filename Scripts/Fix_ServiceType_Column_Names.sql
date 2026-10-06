@@ -2,7 +2,7 @@
 -- Domain model uses: LastUpdatedDate, LastUpdatedBy
 -- Database currently has: UpdatedDate, UpdatedBy
 
-USE obmsdev_backup;
+USE [obmsindia];
 GO
 
 -- Check if columns exist with old names

@@ -7,6 +7,28 @@ namespace OBMS.WebAPI.Services
         PFCalculationResult CalculatePF(decimal basicSalary, decimal da, DateTime calculationDate);
         PFCalculationResult CalculatePFWithAge(decimal basicSalary, decimal da, DateTime calculationDate, DateTime? dateOfBirth);
         bool IsPFApplicable(decimal basicSalary, decimal da, DateTime calculationDate);
+
+        /// <summary>
+        /// Calculates employee PF contribution for Indian payroll.
+        /// Matches Crystal Report formula exactly:
+        ///   pfWage  = (basic + da + otherAllowances) / calendarDays * workedDays
+        ///   capped  = Min(pfWage, BasicSalaryLimit from PFConfiguration)
+        ///   pf      = Round(capped * EmployeeRate / 100, 0)
+        /// </summary>
+        /// <param name="basic">CB_Basic</param>
+        /// <param name="da">CB_DA</param>
+        /// <param name="otherAllowances">CB_OtherAllowances</param>
+        /// <param name="calendarDays">Total calendar days in the salary month</param>
+        /// <param name="workedDays">BasicSalaryDays (actual days worked)</param>
+        /// <param name="calculationDate">Salary period date (for config lookup)</param>
+        /// <returns>Tuple of (PF employee contribution, PFWage used)</returns>
+        (decimal PF, decimal PFWage) CalculatePFForPayslip(
+            decimal basic,
+            decimal da,
+            decimal otherAllowances,
+            decimal calendarDays,
+            decimal workedDays,
+            DateTime calculationDate);
     }
 
     public class PFCalculationResult
@@ -22,7 +44,7 @@ namespace OBMS.WebAPI.Services
         public decimal EmployeeContributionRate { get; set; }
         public decimal EmployerContributionRate { get; set; }
         public DateTime CalculationDate { get; set; }
-        
+
         // PF Statement specific fields
         public decimal PFSalary { get; set; }
         public decimal PensionSalary { get; set; }

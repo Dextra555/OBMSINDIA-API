@@ -13,11 +13,17 @@ namespace OBMS.WebAPI.BusinessObjects
         private decimal EmployeeID = 0;
         private readonly IConfiguration _configuration;
         private readonly IAttendancePeriodService _attendancePeriodService;
+        private readonly IProfessionalTaxService _professionalTaxService;
+        private readonly IPFCalculationService _pfCalculationService;
+        private readonly IESICalculationService _esiCalculationService;
 
-        public SalaryProcess(IConfiguration configuration, IAttendancePeriodService attendancePeriodService)
+        public SalaryProcess(IConfiguration configuration, IAttendancePeriodService attendancePeriodService, IProfessionalTaxService professionalTaxService, IPFCalculationService pfCalculationService, IESICalculationService esiCalculationService)
         {
             _configuration = configuration;
             _attendancePeriodService = attendancePeriodService;
+            _professionalTaxService = professionalTaxService;
+            _pfCalculationService = pfCalculationService;
+            _esiCalculationService = esiCalculationService;
         }
         public List<KKDNExcelListDto> GetListWithBlankRow(string Branch, string EmployeeType, DateTime dtDateJoinFrom, DateTime dtDateJoinTo, string KDNVetting)
         {
@@ -269,10 +275,11 @@ namespace OBMS.WebAPI.BusinessObjects
                                             sbQuery.Append(" SalaryStructure.WorkingDays, SalaryStructure.GeneralDayOTRate, SalaryStructure.OffDayRate, SalaryStructure.OffDayOTRate, ");
                                             sbQuery.Append(" SalaryStructure.HolidayRate, SalaryStructure.HolidayOTRate, ");
                                             sbQuery.Append(" SalaryStructure.SalaryBand, SalaryStructure.EICC, salarystructure.NonStructure, Employee.NewSalaryStructure, Employee.SalaryStructure1000_3h, Employee.EMP_PASSPORT_NO, ");
-                                            sbQuery.Append(" Employee.CB_Basic, Employee.CB_DA, Employee.CB_HRA, Employee.CB_HRAPercentage, Employee.CB_OtherAllowances, Employee.CB_NH, Employee.CB_NHPercentage, Employee.CB_AdvanceStatutoryBonus, Employee.CB_SubTotal from Employee ");
+                                            sbQuery.Append(" Employee.CB_Basic, Employee.CB_DA, Employee.CB_HRA, Employee.CB_HRAPercentage, Employee.CB_OtherAllowances, Employee.CB_NH, Employee.CB_NHPercentage, Employee.CB_AdvanceStatutoryBonus, Employee.CB_SubTotal, Employee.CB_Leaves, Employee.IndianState, Employee.EMP_ROLE, ISNULL(cm.ClientComplianceStatus,'') AS ClientComplianceStatus from Employee ");
                                             sbQuery.Append("LEFT JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE ");
                                             sbQuery.Append("LEFT JOIN EmployeeSalaryDetails ON EmployeeSalaryDetails.EMPFL_CODE = Employee.EMP_CODE ");
                                             sbQuery.Append("LEFT JOIN SalaryStructure ON SalaryStructure.SalaryID = EmploymentDetails.Salarylab ");
+                                            sbQuery.Append("LEFT JOIN ClientMaster cm ON cm.Code = Employee.EMP_CLIENT ");
                                             sbQuery.Append("WHERE Employee.EMP_ID=@EmployeeID ");
 
                                             cmdEmployee.CommandText = sbQuery.ToString();
@@ -287,6 +294,25 @@ namespace OBMS.WebAPI.BusinessObjects
                                             bool DeductIncomeTax = false; //IncomeTax
                                             decimal WorkingHours = 0;
                                             decimal GeneralDayHours = 0;
+                                            // Professional Tax
+                                            string sIndianState = string.Empty;
+                                            decimal dPTax = 0;
+                                            decimal dPerDaySalary = 0;
+                                            decimal dEarnedSalary = 0;
+                                            // Provident Fund (Indian)
+                                            string sEmpRole = string.Empty;
+                                            string sClientComplianceStatus = string.Empty;
+                                            decimal dPF = 0;
+                                            decimal dPFWage = 0;
+                                            // ESI (Indian)
+                                            decimal dESI = 0;
+                                            decimal dESIWage = 0;
+                                            // GrossPay + LWF
+                                            decimal dGrossPay = 0;
+                                            decimal dLWF = 0;
+                                            // TotalDeduction + NetPay
+                                            decimal dTotalDeduction = 0;
+                                            decimal dNetPay = 0;
                                             int EmployeeAge = 0;
                                             int strCitizen = 0;
                                             decimal NoOfWorkingDays = 0;
@@ -310,6 +336,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                             decimal dCB_NHPercentage = 0;
                                             decimal dCB_AdvanceStatutoryBonus = 0;
                                             decimal dCB_SubTotal = 0;
+                                            decimal dCB_Leaves = 0;
 
                                             if (drEmployee.Read())
                                             {
@@ -364,6 +391,13 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 dCB_NHPercentage = drEmployee.IsDBNull(drEmployee.GetOrdinal("CB_NHPercentage")) ? 0 : drEmployee.GetDecimal(drEmployee.GetOrdinal("CB_NHPercentage"));
                                                 dCB_AdvanceStatutoryBonus = drEmployee.IsDBNull(drEmployee.GetOrdinal("CB_AdvanceStatutoryBonus")) ? 0 : drEmployee.GetDecimal(drEmployee.GetOrdinal("CB_AdvanceStatutoryBonus"));
                                                 dCB_SubTotal = drEmployee.IsDBNull(drEmployee.GetOrdinal("CB_SubTotal")) ? 0 : drEmployee.GetDecimal(drEmployee.GetOrdinal("CB_SubTotal"));
+                                                dCB_Leaves = drEmployee.IsDBNull(drEmployee.GetOrdinal("CB_Leaves")) ? 0 : drEmployee.GetDecimal(drEmployee.GetOrdinal("CB_Leaves"));
+                                                // Read IndianState for Professional Tax calculation
+                                                sIndianState = drEmployee.IsDBNull(drEmployee.GetOrdinal("IndianState")) ? string.Empty : drEmployee.GetString(drEmployee.GetOrdinal("IndianState")).Trim();
+                                                // Read EMP_ROLE + ClientComplianceStatus for PF eligibility
+                                                sEmpRole = drEmployee.IsDBNull(drEmployee.GetOrdinal("EMP_ROLE")) ? string.Empty : drEmployee.GetString(drEmployee.GetOrdinal("EMP_ROLE")).Trim();
+                                                sClientComplianceStatus = drEmployee.IsDBNull(drEmployee.GetOrdinal("ClientComplianceStatus")) ? string.Empty : drEmployee.GetString(drEmployee.GetOrdinal("ClientComplianceStatus")).Trim();
+
                                                 if (drEmployee["SalaryStructure1000_3h"] == DBNull.Value)
                                                 {
                                                     sSalaryStructure1000_3h = 0;
@@ -3368,6 +3402,201 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 sdaIncomeTax.Dispose();
                                             }
 
+                                            // ── EarnedSalary / PerDaySalary / PTax calculation ───────────────────
+                                            // EarnedSalary matches Crystal Report {@EarnedSalary} exactly:
+                                            //   @PerDaySalary = (CB_Basic + CB_DA + CB_HRA + CB_OtherAllowances +
+                                            //                    CB_AdvanceStatutoryBonus + CB_Leaves + CB_NH)
+                                            //                   / CalendarDaysInMonth
+                                            //   @EarnedSalary = BasicSalaryDays × @PerDaySalary
+                                            //
+                                            // PTax sourced from ProfessionalTaxConfiguration (Slab Management page).
+                                            // INCOMETAXDETECT flag gates PTax; EarnedSalary + PerDaySalary are
+                                            // always stored regardless of INCOMETAXDETECT.
+                                            //
+                                            // Tamil Nadu (TaxPeriod=SemiAnnual): service matches EarnedSalary × 6
+                                            // then divides TaxAmount by 6 → monthly PTax.
+                                            dPTax = 0;
+                                            dPerDaySalary = 0;
+                                            dEarnedSalary = 0;
+                                            try
+                                            {
+                                                // Calendar days in the salary period month (e.g. Jan=31, Apr=30)
+                                                int calendarDaysInMonth = DateTime.DaysInMonth(Period.Year, Period.Month);
+
+                                                // Full-month gross = sum of all CB components
+                                                // (matches Crystal @PerDaySalary numerator)
+                                                decimal cbGross = dCB_Basic + dCB_DA + dCB_HRA
+                                                                + dCB_OtherAllowances + dCB_AdvanceStatutoryBonus
+                                                                + dCB_Leaves + dCB_NH;
+
+                                                // Per-day salary rate (4dp precision, e.g. 30000/31 = 967.7419)
+                                                dPerDaySalary = calendarDaysInMonth > 0
+                                                    ? Math.Round(cbGross / calendarDaysInMonth, 4)
+                                                    : cbGross;
+
+                                                // Earned salary = actual days worked × per-day rate
+                                                dEarnedSalary = BasicSalaryDays > 0
+                                                    ? Math.Round(BasicSalaryDays * dPerDaySalary, 2)
+                                                    : Math.Round(cbGross, 2); // fallback: full-month gross
+
+                                                // PTax: only if INCOMETAXDETECT = true and state is set
+                                                if (DeductIncomeTax && !string.IsNullOrWhiteSpace(sIndianState))
+                                                {
+                                                    dPTax = Math.Round(
+                                                        _professionalTaxService.GetProfessionalTaxAmount(
+                                                            dEarnedSalary,
+                                                            sIndianState,
+                                                            Period),
+                                                        0, MidpointRounding.AwayFromZero);
+                                                }
+                                            }
+                                            catch (Exception ptaxEx)
+                                            {
+                                                // Log the actual exception so we can diagnose
+                                                // PTax calculation failure — default to 0 (non-fatal)
+                                                System.Diagnostics.Debug.WriteLine(
+                                                    $"PTax calculation failed for EmployeeID={EmployeeID} " +
+                                                    $"State={sIndianState} EarnedSalary={dEarnedSalary}: " +
+                                                    $"{ptaxEx.GetType().Name}: {ptaxEx.Message}");
+                                                dPerDaySalary = 0;
+                                                dEarnedSalary = 0;
+                                                dPTax = 0;
+                                            }
+                                            // ─────────────────────────────────────────────────────────────────────
+
+                                            // ── Provident Fund (PF) calculation ──────────────────────────────────
+                                            // Matches Crystal Report eligibility + wage formula exactly:
+                                            //
+                                            // Eligibility:
+                                            //   epfdetect = true
+                                            //   AND ( ClientComplianceStatus = "compliance_client"
+                                            //         OR EMP_ROLE = "Staff" )
+                                            //
+                                            // Wage:
+                                            //   total   = CB_Basic + CB_DA + CB_OtherAllowances
+                                            //   perDay  = total / CalendarDays
+                                            //   pfWage  = perDay × BasicSalaryDays
+                                            //   capped  = Min(pfWage, BasicSalaryLimit)  [₹15,000 from PFConfiguration]
+                                            //   PF      = Round(capped × EmployeeRate / 100, 0)   [12%]
+                                            dPF = 0;
+                                            dPFWage = 0;
+                                            if (DeductEPF)
+                                            {
+                                                bool pfEligibleByRole =
+                                                    string.Equals(sClientComplianceStatus, "compliance_client", StringComparison.OrdinalIgnoreCase)
+                                                    || string.Equals(sEmpRole, "Staff", StringComparison.OrdinalIgnoreCase);
+
+                                                if (pfEligibleByRole)
+                                                {
+                                                    try
+                                                    {
+                                                        int pfCalendarDays = DateTime.DaysInMonth(Period.Year, Period.Month);
+                                                        (dPF, dPFWage) = _pfCalculationService.CalculatePFForPayslip(
+                                                            dCB_Basic,
+                                                            dCB_DA,
+                                                            dCB_OtherAllowances,
+                                                            pfCalendarDays,
+                                                            BasicSalaryDays,
+                                                            Period);
+                                                    }
+                                                    catch
+                                                    {
+                                                        // Non-fatal: default to 0
+                                                        dPF = 0;
+                                                        dPFWage = 0;
+                                                    }
+                                                }
+                                            }
+                                            // ─────────────────────────────────────────────────────────────────────
+
+                                            // ── ESI (Employee State Insurance) calculation ───────────────────────
+                                            // Matches Crystal Report eligibility + wage formula exactly:
+                                            //
+                                            // Eligibility:
+                                            //   SOCSODETECT = true
+                                            //   AND ( ClientComplianceStatus = "compliance_client"
+                                            //         OR EMP_ROLE = "Staff" )
+                                            //
+                                            // Wage:
+                                            //   esiWage = EarnedSalary − CB_AdvanceStatutoryBonus
+                                            //   if esiWage < BasicSalaryLimit (₹21,000 from ESIConfiguration)
+                                            //       ESI = Round(esiWage × EmployeeRate / 100, 0)  [0.75%]
+                                            //   else ESI = 0
+                                            dESI = 0;
+                                            dESIWage = 0;
+                                            if (DeductSOCSO)
+                                            {
+                                                bool esiEligibleByRole =
+                                                    string.Equals(sClientComplianceStatus, "compliance_client", StringComparison.OrdinalIgnoreCase)
+                                                    || string.Equals(sEmpRole, "Staff", StringComparison.OrdinalIgnoreCase);
+
+                                                if (esiEligibleByRole)
+                                                {
+                                                    try
+                                                    {
+                                                        (dESI, dESIWage) = _esiCalculationService.CalculateESIForPayslip(
+                                                            dEarnedSalary,
+                                                            dCB_AdvanceStatutoryBonus,
+                                                            Period);
+                                                    }
+                                                    catch
+                                                    {
+                                                        // Non-fatal: default to 0
+                                                        dESI = 0;
+                                                        dESIWage = 0;
+                                                    }
+                                                }
+                                            }
+                                            // ─────────────────────────────────────────────────────────────────────
+
+                                            // ── GrossPay calculation ─────────────────────────────────────────────
+                                            // Matches Crystal Report {@gross} formula exactly:
+                                            //   GrossPay = CB_Basic + CB_DA + CB_HRA + CB_OtherAllowances +
+                                            //              CB_AdvanceStatutoryBonus + CB_Leaves + CB_NH
+                                            // This is the full-month CB sum (not prorated by attendance days).
+                                            dGrossPay = Math.Round(
+                                                dCB_Basic + dCB_DA + dCB_HRA + dCB_OtherAllowances
+                                                + dCB_AdvanceStatutoryBonus + dCB_Leaves + dCB_NH, 2);
+
+                                            // ── LWF (Labour Welfare Fund) calculation ────────────────────────────
+                                            // Matches Crystal Report LWF formula exactly:
+                                            //   If Month(Period) = 12 (December) → LWF = 30
+                                            //   Else → LWF = 0
+                                            dLWF = Period.Month == 12 ? 30m : 0m;
+                                            // ─────────────────────────────────────────────────────────────────────
+
+                                            // ── TotalDeduction + NetPay calculation ──────────────────────────────
+                                            // Crystal Report formulas:
+                                            //
+                                            //   TotalDeduction = {@PF} + {@ESI_Employee}
+                                            //                  + DailyAdvanceRecovery + MonthlyAdvanceRecovery
+                                            //                  + UniformIssueRecovery + LoanRecovery
+                                            //                  + {@OtherDeduction}  [= MiscDeduction]
+                                            //                  + {@monthleave}      [= GrossPay - EarnedSalary]
+                                            //                  + PTax + LWF
+                                            //
+                                            //   NetPay = {@GrossPay} - {@TotalDeduction}
+                                            //          = GrossPay - TotalDeduction
+                                            // ─────────────────────────────────────────────────────────────────────
+                                            decimal dMonthLeave = Math.Round(dGrossPay - dEarnedSalary, 2);
+                                            if (dMonthLeave < 0) dMonthLeave = 0; // safety: never negative
+
+                                            dTotalDeduction = Math.Round(
+                                                dPF
+                                                + dESI
+                                                + DailyAdvance
+                                                + MonthlyAdvance
+                                                + UniformIssue
+                                                + Loan
+                                                + dMiscDeductions
+                                                + dMonthLeave
+                                                + dPTax
+                                                + dLWF,
+                                                2);
+
+                                            dNetPay = Math.Round(dGrossPay - dTotalDeduction, 2);
+                                            // ─────────────────────────────────────────────────────────────────────
+
                                             SqlCommand cmdAdvanceRepay = new SqlCommand("DELETE FROM AdvanceRepayment WHERE PaySlipID = (SELECT ID FROM PaySlip WHERE Period=@Period AND EmployeeID=@EmployeeID)");
                                             cmdAdvanceRepay.Parameters.AddWithValue("@Period", Period);
                                             cmdAdvanceRepay.Parameters.AddWithValue("@EmployeeID", EmployeeID);
@@ -3414,7 +3643,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 sbQuery.Append(" EPFEmployerContribution, SOCSOEmployerContribution, ");
                                                 sbQuery.Append(" DailyAdvanceRecovery, MonthlyAdvanceRecovery,SpecialAdvanceRecovery, UniformIssueRecovery, LoanRecovery,IncomeTaxDeduction, ");
                                                 sbQuery.Append(" MiscAmount, MiscDeduction,Bonus,SalaryPayMode, ");
-                                                sbQuery.Append(" LastUpdate,LastUpdatedBy,SIPEmployeeContribution,SIPEmployerContribution) VALUES (@Period, @EmployeeID, @BasicSalaryDays,@BasicSalaryRate,@BasicSalary, ");
+                                                sbQuery.Append(" LastUpdate,LastUpdatedBy,SIPEmployeeContribution,SIPEmployerContribution,PTax,EarnedSalary,PerDaySalary,PF,PFWage,ESI,ESIWage,GrossPay,LWF,TotalDeduction,NetPay) VALUES (@Period, @EmployeeID, @BasicSalaryDays,@BasicSalaryRate,@BasicSalary, ");
                                                 sbQuery.Append(" @OverTimeSalaryHours,@OverTimeSalaryRate,@OverTimeSalary,@OffDaySalaryDays,@OffDaySalaryRate,@OffDaySalary, ");
                                                 sbQuery.Append(" @OffDayOverTimeSalaryHours,@OffDayOverTimeSalaryRate,@OffDayOverTimeSalary,@HolidaySalaryDays, ");
                                                 sbQuery.Append(" @HolidaySalaryRate,@HolidaySalary,@HolidayOverTimeSalaryHours,@HolidayOverTimeSalaryRate, ");
@@ -3423,7 +3652,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 sbQuery.Append(" @EPFEmployerContribution, @SOCSOEmployerContribution, ");
                                                 sbQuery.Append(" @DailyAdvanceRecovery, @MonthlyAdvanceRecovery,@SpecialAdvanceRecovery, @UniformIssueRecovery, @LoanRecovery, @IncomeTaxDeduction, ");
                                                 sbQuery.Append(" @MiscAmount, @MiscDeduction,@Bonus, @SalaryPayMode, ");
-                                                sbQuery.Append(" @LASTUPDATE,@LastUpdatedBy,@SIPEmployeeContribution,@SIPEmployerContribution); SELECT SCOPE_IDENTITY()");
+                                                sbQuery.Append(" @LASTUPDATE,@LastUpdatedBy,@SIPEmployeeContribution,@SIPEmployerContribution,@PTax,@EarnedSalary,@PerDaySalary,@PF,@PFWage,@ESI,@ESIWage,@GrossPay,@LWF,@TotalDeduction,@NetPay); SELECT SCOPE_IDENTITY()");
                                                 cmdPaySlip.CommandText = sbQuery.ToString();
                                                 cmdPaySlip.Parameters.AddWithValue("@Period", Period);
                                                 cmdPaySlip.Parameters.AddWithValue("@EmployeeID", EmployeeID);
@@ -3479,6 +3708,17 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 cmdPaySlip.Parameters.AddWithValue("@LastUpdatedBy", CurrentUser);
                                                 cmdPaySlip.Parameters.AddWithValue("@SIPEmployeeContribution", dSIPEmployee);
                                                 cmdPaySlip.Parameters.AddWithValue("@SIPEmployerContribution", dSIPEmployer);
+                                                cmdPaySlip.Parameters.AddWithValue("@PTax", dPTax);
+                                                cmdPaySlip.Parameters.AddWithValue("@EarnedSalary", dEarnedSalary);
+                                                cmdPaySlip.Parameters.AddWithValue("@PerDaySalary", dPerDaySalary);
+                                                cmdPaySlip.Parameters.AddWithValue("@PF", dPF);
+                                                cmdPaySlip.Parameters.AddWithValue("@PFWage", dPFWage);
+                                                cmdPaySlip.Parameters.AddWithValue("@ESI", dESI);
+                                                cmdPaySlip.Parameters.AddWithValue("@ESIWage", dESIWage);
+                                                cmdPaySlip.Parameters.AddWithValue("@GrossPay", dGrossPay);
+                                                cmdPaySlip.Parameters.AddWithValue("@LWF", dLWF);
+                                                cmdPaySlip.Parameters.AddWithValue("@TotalDeduction", dTotalDeduction);
+                                                cmdPaySlip.Parameters.AddWithValue("@NetPay", dNetPay);
                                                 SqlDataReader drTemp = sdaPaySlip.RetrieveData(cmdPaySlip);
                                                 drTemp.Read();
                                                 decimal dPaySlipID = drTemp.GetDecimal(0);
@@ -3518,7 +3758,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                             sbQuery.Append(" EPFEmployerContribution, SOCSOEmployerContribution, ");
                                             sbQuery.Append(" DailyAdvanceRecovery, MonthlyAdvanceRecovery,SpecialAdvanceRecovery, UniformIssueRecovery, LoanRecovery,IncomeTaxDeduction, ");
                                             sbQuery.Append(" MiscAmount, MiscDeduction,Bonus,SalaryPayMode, ");
-                                            sbQuery.Append(" LastUpdate,LastUpdatedBy,Version,SIPEmployeeContribution,SIPEmployerContribution) VALUES (@Period, @EmployeeID, @BasicSalaryDays,@BasicSalaryRate,@BasicSalary, ");
+                                            sbQuery.Append(" LastUpdate,LastUpdatedBy,Version,SIPEmployeeContribution,SIPEmployerContribution,PTax,EarnedSalary,PerDaySalary,PF,PFWage,ESI,ESIWage,GrossPay,LWF,TotalDeduction,NetPay) VALUES (@Period, @EmployeeID, @BasicSalaryDays,@BasicSalaryRate,@BasicSalary, ");
                                             sbQuery.Append(" @OverTimeSalaryHours,@OverTimeSalaryRate,@OverTimeSalary,@OffDaySalaryDays,@OffDaySalaryRate,@OffDaySalary, ");
                                             sbQuery.Append(" @OffDayOverTimeSalaryHours,@OffDayOverTimeSalaryRate,@OffDayOverTimeSalary,@HolidaySalaryDays, ");
                                             sbQuery.Append(" @HolidaySalaryRate,@HolidaySalary,@HolidayOverTimeSalaryHours,@HolidayOverTimeSalaryRate, ");
@@ -3527,7 +3767,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                             sbQuery.Append(" @EPFEmployerContribution, @SOCSOEmployerContribution, ");
                                             sbQuery.Append(" @DailyAdvanceRecovery, @MonthlyAdvanceRecovery,@SpecialAdvanceRecovery, @UniformIssueRecovery, @LoanRecovery, @IncomeTaxDeduction, ");
                                             sbQuery.Append(" @MiscAmount, @MiscDeduction,@Bonus, @SalaryPayMode, ");
-                                            sbQuery.Append(" @LASTUPDATE,@LastUpdatedBy,@Version,@SIPEmployeeContribution,@SIPEmployerContribution)");
+                                            sbQuery.Append(" @LASTUPDATE,@LastUpdatedBy,@Version,@SIPEmployeeContribution,@SIPEmployerContribution,@PTax,@EarnedSalary,@PerDaySalary,@PF,@PFWage,@ESI,@ESIWage,@GrossPay,@LWF,@TotalDeduction,@NetPay)");
 
                                             SqlCommand cmdPaySlipAudit = new SqlCommand();
                                             cmdPaySlipAudit.CommandText = sbQuery.ToString();
@@ -3578,6 +3818,17 @@ namespace OBMS.WebAPI.BusinessObjects
                                             cmdPaySlipAudit.Parameters.AddWithValue("@Version", sSalaryProcessVersion);
                                             cmdPaySlipAudit.Parameters.AddWithValue("@SIPEmployeeContribution", dSIPEmployee);
                                             cmdPaySlipAudit.Parameters.AddWithValue("@SIPEmployerContribution", dSIPEmployer);
+                                            cmdPaySlipAudit.Parameters.AddWithValue("@PTax", dPTax);
+                                            cmdPaySlipAudit.Parameters.AddWithValue("@EarnedSalary", dEarnedSalary);
+                                            cmdPaySlipAudit.Parameters.AddWithValue("@PerDaySalary", dPerDaySalary);
+                                            cmdPaySlipAudit.Parameters.AddWithValue("@PF", dPF);
+                                            cmdPaySlipAudit.Parameters.AddWithValue("@PFWage", dPFWage);
+                                            cmdPaySlipAudit.Parameters.AddWithValue("@ESI", dESI);
+                                            cmdPaySlipAudit.Parameters.AddWithValue("@ESIWage", dESIWage);
+                                            cmdPaySlipAudit.Parameters.AddWithValue("@GrossPay", dGrossPay);
+                                            cmdPaySlipAudit.Parameters.AddWithValue("@LWF", dLWF);
+                                            cmdPaySlipAudit.Parameters.AddWithValue("@TotalDeduction", dTotalDeduction);
+                                            cmdPaySlipAudit.Parameters.AddWithValue("@NetPay", dNetPay);
 
                                             sdaPaySlip.ExecuteSQL(cmdPaySlipAudit);
                                             cmdPaySlipAudit.Dispose();

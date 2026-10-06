@@ -1,5 +1,6 @@
 using OBMS.WebAPI.Models.Domain;
 using OBMS.WebAPI.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace OBMS.WebAPI.Services
 {
@@ -107,9 +108,47 @@ namespace OBMS.WebAPI.Services
             return grossSalary <= esiConfig.BasicSalaryLimit;
         }
 
+        // ── Helpers ──────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Calculates employee ESI for Indian payroll — matches Crystal Report formula exactly.
+        ///
+        /// Crystal formula:
+        ///   gross   = EarnedSalary − CB_AdvanceStatutoryBonus
+        ///   if gross &lt; BasicSalaryLimit (₹21,000)
+        ///       ESI = Round(gross × EmployeeRate / 100, 0)   [0.75%]
+        ///   else
+        ///       ESI = 0
+        /// </summary>
+        public (decimal ESI, decimal ESIWage) CalculateESIForPayslip(
+            decimal earnedSalary,
+            decimal cbAdvanceStatutoryBonus,
+            DateTime calculationDate)
+        {
+            var esiConfig = GetActiveESIConfiguration(calculationDate);
+            if (esiConfig == null)
+                return (0m, 0m);
+
+            // Step 1 — ESI wage = EarnedSalary minus Advance Statutory Bonus
+            decimal esiWage = Math.Round(earnedSalary - cbAdvanceStatutoryBonus, 2);
+            if (esiWage < 0) esiWage = 0;
+
+            // Step 2 — only applicable if esiWage < BasicSalaryLimit (₹21,000)
+            if (esiWage >= esiConfig.BasicSalaryLimit)
+                return (0m, esiWage);
+
+            // Step 3 — ESI = Round(esiWage × EmployeeRate / 100, 0)
+            // Use MidpointRounding.AwayFromZero to match Crystal Report Round() behaviour
+            // (Crystal rounds 0.5 UP, C# default banker's rounding rounds 0.5 to nearest even)
+            decimal esi = Math.Round(esiWage * esiConfig.EmployeeRate / 100m, 0, MidpointRounding.AwayFromZero);
+
+            return (esi, esiWage);
+        }
+
         private ESIConfiguration GetActiveESIConfiguration(DateTime calculationDate)
         {
             return _context.Set<ESIConfiguration>()
+                .AsNoTracking()
                 .Where(c => c.IsActive && c.EffectiveDate <= calculationDate)
                 .OrderByDescending(c => c.EffectiveDate)
                 .FirstOrDefault();

@@ -1,5 +1,5 @@
 -- Create ServiceType table if it doesn't exist
-USE [obms];
+USE [obmsindia];
 GO
 
 IF NOT EXISTS (SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'ServiceType')

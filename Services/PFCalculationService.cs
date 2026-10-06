@@ -1,5 +1,6 @@
 using OBMS.WebAPI.Models.Domain;
 using OBMS.WebAPI.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace OBMS.WebAPI.Services
 {
@@ -143,9 +144,55 @@ namespace OBMS.WebAPI.Services
             return totalWages > 0;
         }
 
+        // ── Helpers ──────────────────────────────────────────────────────────────
+
+        /// <summary>
+        /// Calculates employee PF for Indian payroll — matches Crystal Report formula exactly.
+        ///
+        /// Crystal formula:
+        ///   total   = basic + da + others
+        ///   perDay  = total / actualDays          (actualDays = calendar days in month)
+        ///   pfWage  = perDay × workedDays          (workedDays = BasicSalaryDays)
+        ///   capped  = Min(pfWage, BasicSalaryLimit) (₹15,000 from PFConfiguration)
+        ///   PF      = Round(capped × EmployeeRate / 100, 0)
+        /// </summary>
+        public (decimal PF, decimal PFWage) CalculatePFForPayslip(
+            decimal basic,
+            decimal da,
+            decimal otherAllowances,
+            decimal calendarDays,
+            decimal workedDays,
+            DateTime calculationDate)
+        {
+            var pfConfig = GetActivePFConfiguration(calculationDate);
+            if (pfConfig == null)
+                return (0m, 0m);
+
+            // Step 1 — total CB wage components (same as Crystal numerator)
+            decimal total = basic + da + otherAllowances;
+
+            // Step 2 — per-day rate
+            decimal perDay = calendarDays > 0 ? total / calendarDays : total;
+
+            // Step 3 — PF wage based on actual worked days
+            decimal pfWage = Math.Round(perDay * workedDays, 2);
+
+            // Step 4 — apply wage cap from PFConfiguration (₹15,000)
+            decimal cappedWage = pfWage > pfConfig.BasicSalaryLimit
+                ? pfConfig.BasicSalaryLimit
+                : pfWage;
+
+            // Step 5 — employee PF contribution, rounded to nearest rupee
+            // Use MidpointRounding.AwayFromZero to match Crystal Report Round() behaviour
+            decimal pf = Math.Round(cappedWage * pfConfig.EmployeeRate / 100m, 0, MidpointRounding.AwayFromZero);
+
+            return (pf, cappedWage);
+        }
+
         private PFConfiguration GetActivePFConfiguration(DateTime calculationDate)
         {
             return _context.Set<PFConfiguration>()
+                .AsNoTracking()
                 .Where(c => c.IsActive && c.EffectiveDate <= calculationDate)
                 .OrderByDescending(c => c.EffectiveDate)
                 .FirstOrDefault();

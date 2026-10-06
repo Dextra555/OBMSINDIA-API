@@ -36,14 +36,19 @@ namespace OBMS.WebAPI.BusinessObjects
         }
 
         // ── Non-operational exclusion ─────────────────────────────────────────
-        // Only Cat='U' (Expenses) rows appear in Expenses section.
-        // CONTRA is always excluded regardless of Trade Type.
+        // Expenses section includes:
+        //   - Cat='U' (Utility/Expense) rows
+        //   - Cat IS NULL or empty (uncategorised payments — treated as expenses)
+        // CONTRA is always excluded regardless of Cat value.
         private const string ExcludeNonOperational =
             "AND ISNULL((SELECT TOP 1 ic3.Cat FROM InventoryCategory ic3 " +
-            "            WHERE ic3.ID = TRY_CAST(bp.ItemCategory AS INT)), '') = 'U' " +
+            "            WHERE ic3.ID = TRY_CAST(bp.ItemCategory AS INT)), 'U') IN ('U','') " +
             // CONTRA must never appear in Expenses regardless of Trade Type
             "AND ISNULL((SELECT TOP 1 ic3.Name FROM InventoryCategory ic3 " +
-            "            WHERE ic3.ID = TRY_CAST(bp.ItemCategory AS INT)), '') NOT LIKE '%Contra%' ";
+            "            WHERE ic3.ID = TRY_CAST(bp.ItemCategory AS INT)), '') NOT LIKE '%Contra%' " +
+            // Exclude Cat='I' (Income/Other Receipts) and Cat='O' (Others) rows
+            "AND ISNULL((SELECT TOP 1 ic3.Cat FROM InventoryCategory ic3 " +
+            "            WHERE ic3.ID = TRY_CAST(bp.ItemCategory AS INT)), 'U') NOT IN ('I','O') ";
 
         // ── Exclude Purchase-type categories from Expenses ────────────────────
         // Kept for safety — ExcludeNonOperational already restricts to Cat='U',
@@ -99,14 +104,16 @@ namespace OBMS.WebAPI.BusinessObjects
         private static List<YearlyProfitLossDto> QuerySummary(
             DateTime startDate, DateTime endDate, List<int> years)
         {
-            // ── 1a. Sales (BranchIncome) from VWSummaryProfitNLoss ─────────────
+            // ── 1a. Invoice Sales from ClientInvoice (ServiceCharges only, no TaxAmount) ──
+            // Matches the monthly P&L "INVOICE SALES" row exactly.
             const string sqlSales =
                 "SELECT " +
-                "  YEAR(TransactionDate)  AS PayYear, " +
-                "  SUM(BranchIncome)      AS TotalSales " +
-                "FROM VWSummaryProfitNLoss " +
-                "WHERE TransactionDate BETWEEN @StartDate AND @EndDate " +
-                "GROUP BY YEAR(TransactionDate) " +
+                "  YEAR(InvoiceDate)              AS PayYear, " +
+                "  SUM(ServiceCharges - Discount) AS InvoiceSales " +
+                "FROM ClientInvoice " +
+                "WHERE IsDeleted = 'N' " +
+                "AND InvoiceDate BETWEEN @StartDate AND @EndDate " +
+                "GROUP BY YEAR(InvoiceDate) " +
                 "ORDER BY PayYear ";
 
             var salesMap = new Dictionary<int, decimal>();
@@ -121,7 +128,39 @@ namespace OBMS.WebAPI.BusinessObjects
                 while (dr.Read())
                 {
                     int yr = dr.GetInt32(dr.GetOrdinal("PayYear"));
-                    salesMap[yr] = dr.GetDecimal(dr.GetOrdinal("TotalSales"));
+                    salesMap[yr] = dr.GetDecimal(dr.GetOrdinal("InvoiceSales"));
+                }
+            }
+
+            // ── 1a2. Other Receipts from BranchPayments where Cat='I' (Income) ──
+            // Matches the monthly P&L "OTHER RECEIPTS" row exactly.
+            const string sqlOtherReceipts =
+                "SELECT " +
+                "  YEAR(bp.PaymentDate) AS PayYear, " +
+                "  SUM(bpd.Amount)      AS OtherReceipts " +
+                "FROM BranchPayments bp " +
+                "INNER JOIN BranchPaymentDetails bpd ON bpd.PaymentID = bp.ID " +
+                "LEFT  JOIN InventoryCategory ic      ON ic.ID = TRY_CAST(bp.ItemCategory AS INT) " +
+                "WHERE bp.IsDeleted = 0 " +
+                "AND ISNULL(bpd.IsDeleted, 0) = 0 " +
+                "AND bp.PaymentDate BETWEEN @StartDate AND @EndDate " +
+                "AND ISNULL(ic.Cat, '') = 'I' " +
+                "GROUP BY YEAR(bp.PaymentDate) " +
+                "ORDER BY PayYear ";
+
+            var otherReceiptsMap = new Dictionary<int, decimal>();
+
+            using (var cmd = new SqlCommand { CommandText = sqlOtherReceipts })
+            {
+                cmd.Parameters.AddWithValue("@StartDate", startDate);
+                cmd.Parameters.AddWithValue("@EndDate",   endDate);
+
+                using var sda = new SQLDataAccess(_configuration);
+                using var dr  = sda.RetrieveData(cmd);
+                while (dr.Read())
+                {
+                    int yr = dr.GetInt32(dr.GetOrdinal("PayYear"));
+                    otherReceiptsMap[yr] = dr.GetDecimal(dr.GetOrdinal("OtherReceipts"));
                 }
             }
 
@@ -179,20 +218,15 @@ namespace OBMS.WebAPI.BusinessObjects
                 }
             }
 
-            // ── 1d. Expenses from BranchPayments (operational only, excluding Purchase-type categories) ──
-            string sqlExpenses =
+            // ── 1d. Expenses from VWSummaryProfitNLoss (same source as monthly P&L Crystal Report) ──
+            // Using BranchExpenses from the view ensures Year P&L matches monthly P&L exactly.
+            const string sqlExpenses =
                 "SELECT " +
-                "  YEAR(bp.PaymentDate)  AS PayYear, " +
-                "  SUM(bpd.Amount)       AS TotalExpenses " +
-                "FROM BranchPayments bp " +
-                "INNER JOIN BranchPaymentDetails bpd ON bpd.PaymentID = bp.ID " +
-                "LEFT  JOIN InventoryCategory ic      ON ic.ID = TRY_CAST(bp.ItemCategory AS INT) " +
-                "WHERE bp.IsDeleted = 0 " +
-                "AND ISNULL(bpd.IsDeleted, 0) = 0 " +
-                "AND bp.PaymentDate BETWEEN @StartDate AND @EndDate " +
-                ExcludeNonOperational +
-                ExcludePurchaseCategories +
-                "GROUP BY YEAR(bp.PaymentDate) " +
+                "  YEAR(TransactionDate)   AS PayYear, " +
+                "  SUM(BranchExpenses)     AS TotalExpenses " +
+                "FROM VWSummaryProfitNLoss " +
+                "WHERE TransactionDate BETWEEN @StartDate AND @EndDate " +
+                "GROUP BY YEAR(TransactionDate) " +
                 "ORDER BY PayYear ";
 
             var expensesMap = new Dictionary<int, decimal>();
@@ -212,7 +246,7 @@ namespace OBMS.WebAPI.BusinessObjects
             }
 
             // ── Build ordered per-year rows ────────────────────────────────────
-            var result       = new List<YearlyProfitLossDto>();
+            var result            = new List<YearlyProfitLossDto>();
             decimal grandSales      = 0m;
             decimal grandDebitNote  = 0m;
             decimal grandCreditNote = 0m;
@@ -315,7 +349,7 @@ namespace OBMS.WebAPI.BusinessObjects
                 "INNER JOIN BranchPaymentDetails bpd ON bpd.PaymentID = bp.ID " +
                 "LEFT  JOIN InventoryCategory ic      ON ic.ID = TRY_CAST(bp.ItemCategory AS INT) " +
                 "WHERE bp.IsDeleted = 0 " +
-                "AND ISNULL(bpd.IsDeleted, 0) = 0 " +
+                // Include bpd.IsDeleted rows too — matches VWSummaryProfitNLoss which counts all details
                 "AND bp.PaymentDate BETWEEN @StartDate AND @EndDate " +
                 ExcludeNonOperational +
                 ExcludePurchaseCategories +

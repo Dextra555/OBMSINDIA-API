@@ -360,14 +360,14 @@ namespace OBMS.WebAPI.Controllers
                             State as state, 
                             MinSalary as minSalary,
                             MaxSalary as maxSalary,
-                            TaxAmount as taxAmount, 
+                            TaxAmount as taxAmount,
+                            TaxPeriod as taxPeriod,
                             EffectiveDate as effectiveDate, 
                             IsActive as isActive, 
                             CreatedDate as createdDate,
                             CreatedBy as createdBy,
                             LastUpdatedDate as lastUpdatedDate,
-                            LastUpdatedBy as lastUpdatedBy,
-                            NULL as notes
+                            LastUpdatedBy as lastUpdatedBy
                         FROM ProfessionalTaxConfiguration 
                         WHERE IsActive = 1
                         ORDER BY state, minSalary";
@@ -385,13 +385,13 @@ namespace OBMS.WebAPI.Controllers
                                     minSalary = reader["minSalary"],
                                     maxSalary = reader["maxSalary"] != DBNull.Value ? reader["maxSalary"] : null,
                                     taxAmount = reader["taxAmount"],
+                                    taxPeriod = reader["taxPeriod"],
                                     effectiveDate = reader["effectiveDate"],
                                     isActive = reader["isActive"],
                                     createdDate = reader["createdDate"],
                                     createdBy = reader["createdBy"] != DBNull.Value ? reader["createdBy"] : "SYSTEM",
                                     lastUpdatedDate = reader["lastUpdatedDate"] != DBNull.Value ? reader["lastUpdatedDate"] : null,
-                                    lastUpdatedBy = reader["lastUpdatedBy"] != DBNull.Value ? reader["lastUpdatedBy"] : null,
-                                    notes = reader["notes"] != DBNull.Value ? reader["notes"] : null
+                                    lastUpdatedBy = reader["lastUpdatedBy"] != DBNull.Value ? reader["lastUpdatedBy"] : null
                                 });
                             }
                         }
@@ -417,8 +417,8 @@ namespace OBMS.WebAPI.Controllers
                     
                     var query = @"
                         INSERT INTO ProfessionalTaxConfiguration 
-                        (State, MinSalary, MaxSalary, TaxAmount, EffectiveDate, IsActive, CreatedBy, CreatedDate)
-                        VALUES (@State, @MinSalary, @MaxSalary, @TaxAmount, @EffectiveDate, @IsActive, @CreatedBy, GETDATE())";
+                        (State, MinSalary, MaxSalary, TaxAmount, TaxPeriod, EffectiveDate, IsActive, CreatedBy, CreatedDate)
+                        VALUES (@State, @MinSalary, @MaxSalary, @TaxAmount, @TaxPeriod, @EffectiveDate, @IsActive, @CreatedBy, GETDATE())";
 
                     using (var command = new SqlCommand(query, connection))
                     {
@@ -431,6 +431,7 @@ namespace OBMS.WebAPI.Controllers
                             command.Parameters.AddWithValue("@MaxSalary", DBNull.Value);
                             
                         command.Parameters.AddWithValue("@TaxAmount", (decimal)ptConfig.TaxAmount);
+                        command.Parameters.AddWithValue("@TaxPeriod", ptConfig.TaxPeriod != null ? (string)ptConfig.TaxPeriod : "Monthly");
                         command.Parameters.AddWithValue("@EffectiveDate", DateTime.Parse(ptConfig.EffectiveDate.ToString()));
                         command.Parameters.AddWithValue("@IsActive", true);
                         command.Parameters.AddWithValue("@CreatedBy", "SYSTEM");
@@ -462,6 +463,7 @@ namespace OBMS.WebAPI.Controllers
                             MinSalary = @MinSalary,
                             MaxSalary = @MaxSalary,
                             TaxAmount = @TaxAmount,
+                            TaxPeriod = @TaxPeriod,
                             EffectiveDate = @EffectiveDate,
                             LastUpdatedDate = GETDATE(),
                             LastUpdatedBy = @LastUpdatedBy
@@ -479,6 +481,7 @@ namespace OBMS.WebAPI.Controllers
                             command.Parameters.AddWithValue("@MaxSalary", DBNull.Value);
                             
                         command.Parameters.AddWithValue("@TaxAmount", (decimal)ptConfig.TaxAmount);
+                        command.Parameters.AddWithValue("@TaxPeriod", ptConfig.TaxPeriod != null ? (string)ptConfig.TaxPeriod : "Monthly");
                         command.Parameters.AddWithValue("@EffectiveDate", DateTime.Parse(ptConfig.EffectiveDate.ToString()));
                         command.Parameters.AddWithValue("@LastUpdatedBy", "SYSTEM");
 

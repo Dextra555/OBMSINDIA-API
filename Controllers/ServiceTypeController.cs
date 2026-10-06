@@ -247,7 +247,7 @@ namespace OBMS.WebAPI.Controllers
                         SET ServiceName = @ServiceName,
                             Description = @Description,
                             HSNCode = @HSNCode,
-                            PricingModel = @PricingModel,
+                            PricingModel = ISNULL(@PricingModel, PricingModel),
                             IsActive = @IsActive,
                             LastUpdatedDate = GETDATE(),
                             LastUpdatedBy = @LastUpdatedBy
