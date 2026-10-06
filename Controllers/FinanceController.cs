@@ -3928,9 +3928,9 @@ if (agreement != null && agreement.IsValid == true)
 
                         SELECT
 
-                            CAST(ISNULL(BPD.ID,0) AS INT) AS ID,
+                            CAST(ISNULL(BPD.ID, ISNULL(BPD_DEL.ID, 0)) AS INT) AS ID,
 
-                            CAST(ISNULL(BPD.PaymentID,0) AS INT) AS PaymentID,
+                            CAST(ISNULL(BPD.PaymentID, ISNULL(BPD_DEL.PaymentID, 0)) AS INT) AS PaymentID,
 
                             BM.Code,
 
@@ -3963,6 +3963,14 @@ if (agreement != null && agreement.IsValid == true)
                            AND BPD.PaymentID = @PaymentID
 
                            AND BPD.IsDeleted = 0
+
+                        LEFT JOIN BranchPaymentDetails BPD_DEL
+
+                            ON BPD_DEL.InvoiceID = CI.ID
+
+                           AND BPD_DEL.PaymentID = @PaymentID
+
+                           AND BPD_DEL.IsDeleted = 1
 
                         LEFT JOIN
 
@@ -4316,8 +4324,23 @@ if (agreement != null && agreement.IsValid == true)
                                 {
                                     branchPaymentDetails = _oBMSDbContext.BranchPaymentDetails.Where(x => x.ID == detail.ID).FirstOrDefault();
                                 }
+                                else
+                                {
+                                    // ID=0 means new line — but check if a soft-deleted record
+                                    // already exists for this PaymentID + InvoiceID.
+                                    // If yes, reactivate it instead of inserting a duplicate
+                                    // (duplicate would cause the removed-line re-add to fail).
+                                    var existing = await _oBMSDbContext.BranchPaymentDetails
+                                        .Where(x => x.PaymentID == branchPayment.ID
+                                                 && x.InvoiceID == detail.InvoiceID
+                                                 && x.IsDeleted == true)
+                                        .FirstOrDefaultAsync();
+                                    if (existing != null)
+                                    {
+                                        branchPaymentDetails = existing;
+                                    }
+                                }
 
-                                branchPaymentDetails.ID = detail.ID;
                                 branchPaymentDetails.PaymentID = branchPayment.ID;
                                 branchPaymentDetails.Branch = detail.Branch;
                                 branchPaymentDetails.InvoiceID = detail.InvoiceID;
@@ -4621,6 +4644,32 @@ if (agreement != null && agreement.IsValid == true)
 
 
 
+
+        [HttpPost]
+        [Route("DeletePaymentLine")]
+        public async Task<IActionResult> DeletePaymentLine([FromBody] DeletePaymentRequest request)
+        {
+            try
+            {
+                var detail = await _oBMSDbContext.BranchPaymentDetails
+                    .FirstOrDefaultAsync(x => x.ID == request.Id);
+
+                if (detail == null)
+                    return NotFound(new { message = "Payment line not found." });
+
+                // Hard delete — physically remove the row so Crystal Report
+                // does not show it. PaidAmount queries already use IsDeleted=0
+                // so a hard delete is safe and consistent.
+                _oBMSDbContext.BranchPaymentDetails.Remove(detail);
+                await _oBMSDbContext.SaveChangesAsync();
+
+                return Ok(new { message = "Payment line deleted successfully." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = ex.Message });
+            }
+        }
 
         [HttpGet]
 
