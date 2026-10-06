@@ -265,13 +265,27 @@ namespace OBMS.WebAPI.BusinessObjects
                 // TOTAL SALES (display) = InvoiceSales + OtherReceipts + DebitNote - CreditNote
                 decimal totalSales = invoiceSales + otherReceipts + debitNote - creditNote;
 
-                // NET PROFIT matches Monthly P&L:
-                // = (InvoiceSales + OtherReceipts) - Expenses
-                // DebitNote & CreditNote shown separately but NOT included in profit calc
+                // NET PROFIT = (InvoiceSales + OtherReceipts) - Expenses
+                // DN/CN shown separately but NOT in profit calc — matches Monthly P&L
                 decimal netProfit  = (invoiceSales + otherReceipts) - expenses;
 
-                decimal expPct = totalSales != 0 ? Math.Round(expenses  / totalSales * 100m, 2) : 0m;
-                decimal netPct = totalSales != 0 ? Math.Round(netProfit / totalSales * 100m, 2) : 0m;
+                // EXPENSES % = Expenses / TotalSales × 100
+                decimal expPct = totalSales != 0 ? Math.Round(expenses / totalSales * 100m, 2) : 0m;
+
+                // NET PROFIT % — matches Monthly P&L Crystal Report exactly:
+                //   Sales = 0                → 100%
+                //   Sales > 0, NP ≥ 0 (profit) → NP / Sales × 100
+                //   Sales > 0, NP < 0 (loss)   → -(TotalSales / Expenses) × 100
+                decimal invoiceBase = invoiceSales + otherReceipts;
+                decimal netPct;
+                if (invoiceBase == 0m)
+                    netPct = 100m;
+                else if (netProfit >= 0m)
+                    netPct = Math.Round(netProfit / invoiceBase * 100m, 2);
+                else
+                    netPct = expenses != 0m
+                        ? -Math.Round(totalSales / expenses * 100m, 2)
+                        : 100m;
 
                 result.Add(new YearlyProfitLossDto
                 {
@@ -296,10 +310,20 @@ namespace OBMS.WebAPI.BusinessObjects
             }
 
             // Grand total row
-            // NetProfit = (InvSales + OtherReceipts) - Expenses (DN/CN excluded from profit, matches Monthly P&L)
+            // NetProfit = (InvSales + OtherReceipts) - Expenses
             decimal grandNet    = (grandInvSales + grandOtherRcpt) - grandExpenses;
             decimal grandExpPct = grandTotalSales != 0 ? Math.Round(grandExpenses / grandTotalSales * 100m, 2) : 0m;
-            decimal grandNetPct = grandTotalSales != 0 ? Math.Round(grandNet      / grandTotalSales * 100m, 2) : 0m;
+            // Grand NET PROFIT % — Crystal Report formula: Loss → -(TotalSales/Expenses*100)
+            decimal grandBase   = grandInvSales + grandOtherRcpt;
+            decimal grandNetPct;
+            if (grandBase == 0m)
+                grandNetPct = 100m;
+            else if (grandNet >= 0m)
+                grandNetPct = Math.Round(grandNet / grandBase * 100m, 2);
+            else
+                grandNetPct = grandExpenses != 0m
+                    ? -Math.Round(grandTotalSales / grandExpenses * 100m, 2)
+                    : 100m;
 
             result.Add(new YearlyProfitLossDto
             {
