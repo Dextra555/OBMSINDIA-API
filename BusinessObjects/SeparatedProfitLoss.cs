@@ -47,14 +47,16 @@ namespace OBMS.WebAPI.BusinessObjects
         }
 
         // ── Non-operational exclusion filter (WHERE clause fragment) ────────
-        // Only Cat='U' (Expenses) rows appear in Expenses section.
-        // CONTRA is always excluded regardless of Trade Type.
+        // Expenses section includes Cat='U' rows AND uncategorised (Cat NULL/empty) rows.
+        // Cat='I' (Income), Cat='O' (Others), and CONTRA are always excluded.
         private const string ExcludeNonOperational =
             "AND ISNULL((SELECT TOP 1 ic2.Cat FROM InventoryCategory ic2 " +
-            "            WHERE ic2.ID = TRY_CAST(bp.ItemCategory AS INT)), '') = 'U' " +
+            "            WHERE ic2.ID = TRY_CAST(bp.ItemCategory AS INT)), 'U') IN ('U','') " +
             // CONTRA must never appear in Expenses regardless of Trade Type
             "AND ISNULL((SELECT TOP 1 ic2.Name FROM InventoryCategory ic2 " +
-            "            WHERE ic2.ID = TRY_CAST(bp.ItemCategory AS INT)), '') NOT LIKE '%Contra%' ";
+            "            WHERE ic2.ID = TRY_CAST(bp.ItemCategory AS INT)), '') NOT LIKE '%Contra%' " +
+            "AND ISNULL((SELECT TOP 1 ic2.Cat FROM InventoryCategory ic2 " +
+            "            WHERE ic2.ID = TRY_CAST(bp.ItemCategory AS INT)), 'U') NOT IN ('I','O') ";
 
         // ── Month-label CASE expression ──────────────────────────────────────
         private const string MonthLabel =

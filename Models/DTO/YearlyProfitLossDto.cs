@@ -11,8 +11,11 @@ namespace OBMS.WebAPI.Models.DTO
 
         // ── SALES section ──────────────────────────────────────────────────────
 
-        /// <summary>Gross invoice sales / branch income for the year.</summary>
+        /// <summary>Invoice sales = SUM(ServiceCharges - Discount) from ClientInvoice (no TaxAmount).</summary>
         public decimal Sales { get; set; }
+
+        /// <summary>Other Receipts = BranchPayments where InventoryCategory.Cat = 'I'.</summary>
+        public decimal OtherReceipts { get; set; }
 
         /// <summary>Debit note total for the year (adds to Sales).</summary>
         public decimal DebitNote { get; set; }
@@ -20,7 +23,7 @@ namespace OBMS.WebAPI.Models.DTO
         /// <summary>Credit note total for the year (reduces Sales).</summary>
         public decimal CreditNote { get; set; }
 
-        /// <summary>Total Sales = Sales + DebitNote − CreditNote.</summary>
+        /// <summary>Total Sales = Sales + OtherReceipts + DebitNote − CreditNote.</summary>
         public decimal TotalSales { get; set; }
 
         // ── EXPENSES section ───────────────────────────────────────────────────
