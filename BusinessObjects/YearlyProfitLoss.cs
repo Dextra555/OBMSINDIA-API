@@ -221,14 +221,33 @@ namespace OBMS.WebAPI.BusinessObjects
 
             foreach (int y in years)
             {
-                decimal sales      = salesMap.TryGetValue(y, out var s)  ? s  : 0m;
+                decimal sales      = salesMap.TryGetValue(y, out var s)   ? s  : 0m;
                 decimal debitNote  = debitNoteMap.TryGetValue(y, out var dn) ? dn : 0m;
                 decimal creditNote = creditNoteMap.TryGetValue(y, out var cn) ? cn : 0m;
+                decimal expenses   = expensesMap.TryGetValue(y, out var e)   ? e  : 0m;
+
+                // TOTAL SALES (display) = InvoiceSales + DebitNote - CreditNote
                 decimal totalSales = sales + debitNote - creditNote;
-                decimal expenses   = expensesMap.TryGetValue(y, out var e) ? e  : 0m;
-                decimal netProfit  = totalSales - expenses;
-                decimal expPct     = totalSales != 0 ? Math.Round(expenses  / totalSales * 100m, 2) : 0m;
-                decimal netPct     = totalSales != 0 ? Math.Round(netProfit / totalSales * 100m, 2) : 0m;
+
+                // NET PROFIT = InvoiceSales − Expenses  (matches Monthly P&L)
+                decimal netProfit  = sales - expenses;
+
+                // EXPENSES % = Expenses / TotalSales × 100
+                decimal expPct = totalSales != 0 ? Math.Round(expenses / totalSales * 100m, 2) : 0m;
+
+                // NET PROFIT %:
+                //   Sales = 0          → 100%
+                //   NP ≥ 0 (profit)    → NP / Sales × 100
+                //   NP < 0 (loss)      → -(TotalSales / Expenses × 100)
+                decimal netPct;
+                if (sales == 0m)
+                    netPct = 100m;
+                else if (netProfit >= 0m)
+                    netPct = Math.Round(netProfit / sales * 100m, 2);
+                else
+                    netPct = expenses != 0m
+                        ? -Math.Round(totalSales / expenses * 100m, 2)
+                        : 100m;
 
                 result.Add(new YearlyProfitLossDto
                 {
@@ -251,9 +270,18 @@ namespace OBMS.WebAPI.BusinessObjects
             }
 
             // Grand total row
-            decimal grandNet    = grandTotalSales - grandExpenses;
+            decimal grandNet    = grandSales - grandExpenses;
             decimal grandExpPct = grandTotalSales != 0 ? Math.Round(grandExpenses / grandTotalSales * 100m, 2) : 0m;
-            decimal grandNetPct = grandTotalSales != 0 ? Math.Round(grandNet      / grandTotalSales * 100m, 2) : 0m;
+            // NET PROFIT % Grand Total — same Crystal Report formula
+            decimal grandNetPct;
+            if (grandSales == 0m)
+                grandNetPct = 100m;
+            else if (grandNet >= 0m)
+                grandNetPct = Math.Round(grandNet / grandSales * 100m, 2);
+            else
+                grandNetPct = grandExpenses != 0m
+                    ? -Math.Round(grandTotalSales / grandExpenses * 100m, 2)
+                    : 100m;
 
             result.Add(new YearlyProfitLossDto
             {
