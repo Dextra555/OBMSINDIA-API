@@ -1,0 +1,7 @@
+{
+  "verdict": "APPROVED",
+  "findings": [
+    "Silent exclusion for missing EmployeeSalaryDetails — An employee present in payroll but missing an EmployeeSalaryDetails row will be silently dropped from the ESI report with no log entry. Verify the data model guarantees every employee has a salary-details row, or add a warning log when esiEligibleCodes is notably smaller than empCodes. (possible — not a bug for the reported case, but invisible if it occurs)"
+  ],
+  "reviewDoc": "c:\\Users\\admin\\Documents\\India FWG\\OBMSINDIA-API\\.agents\\tasks\\review.md"
+}

@@ -2143,12 +2143,24 @@ namespace OBMS.WebAPI.Controllers
                 var rows = await GetPayrollRows(branch, client, periodStart, periodEnd);
 
                 // Filter: exclude employees where ESI Deduction = No (SOCSODETECT = false)
-                var empCodes = rows.Select(r => (string)r.empId).Distinct().ToList();
-                var esiEligibleCodes = (await _context.EmployeeSalaryDetails
-                    .Where(sd => empCodes.Contains(sd.EMPFL_CODE) && sd.SOCSODETECT == true)
-                    .Select(sd => sd.EMPFL_CODE)
-                    .ToListAsync()).ToHashSet();
-                rows = rows.Where(r => esiEligibleCodes.Contains((string)r.empId)).ToList();
+                // Only employees with SOCSODETECT = true in EmployeeSalaryDetails should appear in ESI report
+                var empCodes = rows.Select(r => r.empId as string ?? r.empId?.ToString() ?? "").Where(c => !string.IsNullOrEmpty(c)).Distinct().ToList();
+                HashSet<string> esiEligibleCodes;
+                if (empCodes.Count > 0)
+                {
+                    esiEligibleCodes = (await _context.EmployeeSalaryDetails
+                        .Where(sd => empCodes.Contains(sd.EMPFL_CODE) && sd.SOCSODETECT == true)
+                        .Select(sd => sd.EMPFL_CODE)
+                        .ToListAsync()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                }
+                else
+                {
+                    esiEligibleCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                }
+                rows = rows.Where(r => {
+                    var code = r.empId as string ?? r.empId?.ToString() ?? "";
+                    return esiEligibleCodes.Contains(code);
+                }).ToList();
 
 
 
@@ -2159,7 +2171,8 @@ namespace OBMS.WebAPI.Controllers
 
                 {
 
-                    decimal totalMonthlyWages = (decimal)r.gross;
+                    // Use PaySlip ESI (SOCSODeductionAmount) as Total Monthly Wages for ESI Statement
+                    decimal totalMonthlyWages = (decimal)(r.esi ?? r.gross);
 
                     int noOfDaysForWhichWagesPaid = (int)r.daysWorked;
 

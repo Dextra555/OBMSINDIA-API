@@ -270,12 +270,23 @@ namespace OBMS.WebAPI.BusinessObjects
                 decimal expPct = totalSales != 0 ? Math.Round(expenses / totalSales * 100m, 2) : 0m;
 
                 // NET PROFIT %:
+<<<<<<< HEAD
                 //   Sales = 0          → 100%
                 //   NP ≥ 0 (profit)    → NP / Sales × 100
                 //   NP < 0 (loss)      → -(TotalSales / Expenses × 100)
                 decimal netPct;
                 if (sales == 0m)
                     netPct = 100m;
+=======
+                //   Sales = 0, Expenses = 0  → 0%
+                //   Sales = 0, Expenses > 0  → -100%  (pure loss, no income)
+                //   Sales > 0, NP ≥ 0        → NP / Sales × 100
+                //   Sales > 0, NP < 0 (loss) → -(TotalSales / Expenses) × 100
+                decimal invoiceBase = invoiceSales + otherReceipts;
+                decimal netPct;
+                if (invoiceBase == 0m)
+                    netPct = expenses != 0m ? -100m : 0m;
+>>>>>>> f93ce02 (Updated changes)
                 else if (netProfit >= 0m)
                     netPct = Math.Round(netProfit / sales * 100m, 2);
                 else
@@ -306,10 +317,22 @@ namespace OBMS.WebAPI.BusinessObjects
             // Grand total row
             decimal grandNet    = grandSales - grandExpenses;
             decimal grandExpPct = grandTotalSales != 0 ? Math.Round(grandExpenses / grandTotalSales * 100m, 2) : 0m;
+<<<<<<< HEAD
             // NET PROFIT % Grand Total — same Crystal Report formula
             decimal grandNetPct;
             if (grandSales == 0m)
                 grandNetPct = 100m;
+=======
+            // Grand NET PROFIT %:
+            //   Sales = 0, Expenses = 0  → 0%
+            //   Sales = 0, Expenses > 0  → -100%
+            //   Sales > 0, NP ≥ 0        → NP / Sales × 100
+            //   Sales > 0, NP < 0 (loss) → -(TotalSales / Expenses) × 100
+            decimal grandBase   = grandInvSales + grandOtherRcpt;
+            decimal grandNetPct;
+            if (grandBase == 0m)
+                grandNetPct = grandExpenses != 0m ? -100m : 0m;
+>>>>>>> f93ce02 (Updated changes)
             else if (grandNet >= 0m)
                 grandNetPct = Math.Round(grandNet / grandSales * 100m, 2);
             else

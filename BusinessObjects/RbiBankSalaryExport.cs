@@ -59,8 +59,8 @@ namespace OBMS.WebAPI.BusinessObjects
 
         private static string FormatTransactionAmount(decimal amount)
         {
-            // No decimal if amount is in whole number
-            return amount == Math.Truncate(amount) ? amount.ToString("0") : amount.ToString("F2");
+            // Round to nearest whole number for RBI bank export
+            return Math.Round(amount, MidpointRounding.AwayFromZero).ToString("0");
         }
 
         public static List<RbiBankSalaryExport> GetRbiBankSalaryExportData(string dtSalaryPeriod, string branch, string employeeType)
@@ -92,11 +92,7 @@ namespace OBMS.WebAPI.BusinessObjects
                         Employee.EMP_CODE as BeneficiaryCode,
                         ISNULL(NULLIF(EmployeeSalaryDetails.EMPFL_BK_ACCNO, ''), Employee.BankAccountNumber) as BeneficiaryAccountNumber,
                         Employee.EMP_NAME as BeneficiaryName,
-                        PaySlip.BasicSalary + PaySlip.OverTimeSalary + PaySlip.OffDaySalary + PaySlip.OffDayOverTimeSalary +
-                         PaySlip.HolidaySalary + PaySlip.HolidayOverTimeSalary + PaySlip.Shift2Salary +
-                         PaySlip.AttendanceAllowance + PaySlip.ReAllowance + PaySlip.MiscAmount -
-                         (PaySlip.EPFDeductionAmount + PaySlip.SOCSODeductionAmount + PaySlip.DailyAdvanceRecovery +
-                          PaySlip.MonthlyAdvanceRecovery + PaySlip.UniformIssueRecovery + PaySlip.LoanRecovery + PaySlip.MiscDeduction) as TransactionAmount,
+                        PaySlip.NetPay + ISNULL(MiscAmt.TotalMiscAmount, 0) as TransactionAmount,
                         Employee.EMP_ID as CustomerReferenceNumber,
                         EmployeeSalaryDetails.EMPFL_BRANCHCODE as PayerAddress1,
                         ISNULL(NULLIF(Employee.IFSC_Code, ''), Employee.BankIFSC) as IFSCCode,
@@ -113,7 +109,14 @@ namespace OBMS.WebAPI.BusinessObjects
                         FROM   (EmployeeSalaryDetails EmployeeSalaryDetails
                         INNER JOIN (PaySlip PaySlip INNER JOIN Employee Employee ON PaySlip.EmployeeID=Employee.EMP_ID)
                         ON EmployeeSalaryDetails.EMPFL_CODE=Employee.EMP_CODE)
-                        INNER JOIN BranchMaster BankMaster ON Employee.EMP_BRANCH_CODE=BankMaster.Code "
+                        INNER JOIN BranchMaster BankMaster ON Employee.EMP_BRANCH_CODE=BankMaster.Code
+                        LEFT JOIN (
+                            SELECT EmployeeID, SUM(Amount) AS TotalMiscAmount
+                            FROM MiscTrans
+                            WHERE YEAR(TransDate) = YEAR(@SalaryPeriod)
+                              AND MONTH(TransDate) = MONTH(@SalaryPeriod)
+                            GROUP BY EmployeeID
+                        ) MiscAmt ON MiscAmt.EmployeeID = Employee.EMP_ID "
                         + whereClause +
                         " ORDER BY Employee.EMP_NAME ";
 

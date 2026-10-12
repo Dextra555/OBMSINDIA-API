@@ -60,8 +60,8 @@ namespace OBMS.WebAPI.BusinessObjects
 
         private static string FormatTransactionAmount(decimal amount)
         {
-            // No decimal if amount is in whole number
-            return amount == Math.Truncate(amount) ? amount.ToString("0") : amount.ToString("F2");
+            // Round to nearest whole number for RBI bank export
+            return Math.Round(amount, MidpointRounding.AwayFromZero).ToString("0");
         }
 
         public static List<RbiBankAdvanceExport> GetRbiBankAdvanceExportData(string dtSalaryPeriod, string branch, string employeeType)
