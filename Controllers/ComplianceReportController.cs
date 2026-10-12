@@ -2142,6 +2142,15 @@ namespace OBMS.WebAPI.Controllers
 
                 var rows = await GetPayrollRows(branch, client, periodStart, periodEnd);
 
+                // Filter: exclude employees where ESI Deduction = No (SOCSODETECT = false)
+                var empCodes = rows.Select(r => (string)r.empId).Distinct().ToList();
+                var esiEligibleCodes = (await _context.EmployeeSalaryDetails
+                    .Where(sd => empCodes.Contains(sd.EMPFL_CODE) && sd.SOCSODETECT == true)
+                    .Select(sd => sd.EMPFL_CODE)
+                    .ToListAsync()).ToHashSet();
+                rows = rows.Where(r => esiEligibleCodes.Contains((string)r.empId)).ToList();
+
+
 
 
                 // Format ESI Statement data with required columns
