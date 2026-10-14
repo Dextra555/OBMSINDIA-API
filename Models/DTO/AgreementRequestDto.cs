@@ -16,6 +16,7 @@ namespace OBMS.WebAPI.Models.DTO
         public string? LastUpdatedBy { get; set; }
         public bool? IsValid { get; set; }
         public int? QuotationID { get; set; }
+        public string? Period { get; set; }
         public AgreementDetailsRequestDto[]? agreementDetails { get; set; }
 
     }

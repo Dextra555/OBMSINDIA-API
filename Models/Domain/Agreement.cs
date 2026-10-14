@@ -24,5 +24,8 @@ namespace OBMS.WebAPI.Models.Domain
 
         public bool? IsValid { get; set; }
         public int? QuotationID { get; set; }
+
+        [StringLength(50)]
+        public string? Period { get; set; }
     }
 }

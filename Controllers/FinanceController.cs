@@ -1637,7 +1637,9 @@ var sqlQuery = @"
                 invoiceNoOriginal = invoice.InvoiceNo ?? "001",
                 invoiceDateOriginal = invoice.InvoiceDate,
                 invoiceDate = invoice.InvoiceDate.ToString("dd/MM/yyyy"),
-                servicePeriod = invoice.InvoiceDate.ToString("MMMM yyyy"),
+                servicePeriod = !string.IsNullOrWhiteSpace(agreement?.Period)
+                    ? agreement.Period
+                    : invoice.InvoiceDate.ToString("MMMM yyyy"),
                 workOrderNoFormatted = GetWorkOrderNo(client?.Code ?? ""),
                 workOrderNoOriginal = GetWorkOrderNo(client?.Code ?? ""),
                 workOrderDate = GetWorkOrderDate(client?.Code ?? ""),
