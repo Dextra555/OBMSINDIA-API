@@ -88,6 +88,8 @@ SELECT DISTINCT
     PaySlip.LWF,
     PaySlip.TotalDeduction,
     PaySlip.NetPay,
+    PaySlip.TDS,
+    Employee.TDSApplicable,
     -- PeriodTotalDays: actual period days based on work site client custom period config
     -- e.g. Anejas (26 to 25): Aug 26 - Sep 25 = 31 days for Sep 2026
     -- Normal client: calendar month days (Sep = 30, Aug = 31, etc.)

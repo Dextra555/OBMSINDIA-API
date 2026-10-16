@@ -151,5 +151,14 @@ namespace OBMS.WebAPI.Models.Domain
         /// </summary>
         [Column(TypeName = "decimal(10,2)")]
         public decimal NetPay { get; set; } = 0;
+
+        /// <summary>
+        /// Monthly TDS (Tax Deducted at Source) calculated from TDSSlabConfiguration slabs.
+        /// Set to 0.00 when Employee.TDSApplicable = false.
+        /// Calculated as (AnnualTax / 12) when Employee.TDSApplicable = true.
+        /// Included in TotalDeduction and therefore reflected in NetPay.
+        /// </summary>
+        [Column(TypeName = "decimal(10,2)")]
+        public decimal TDS { get; set; } = 0;
     }
 }

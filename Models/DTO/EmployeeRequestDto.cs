@@ -319,6 +319,12 @@ namespace OBMS.WebAPI.Models.DTO
         /// </summary>
         public DateTime? BranchStartDate { get; set; }
 
+        /// <summary>
+        /// Whether TDS deduction is applicable for this employee.
+        /// false = No (default), true = Yes.
+        /// </summary>
+        public bool TDSApplicable { get; set; } = false;
+
     }
 
 }

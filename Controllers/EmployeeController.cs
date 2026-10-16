@@ -533,6 +533,9 @@ namespace OBMS.WebAPI.Controllers
                 employee.CB_AdvanceStatutoryBonusPercentage = employeeRequestDto.CB_AdvanceStatutoryBonusPercentage;
                 employee.CB_SubTotal = employeeRequestDto.CB_SubTotal;
 
+                // TDS Deduction Control
+                employee.TDSApplicable = employeeRequestDto.TDSApplicable;
+
                 // Auto-generate SalaryStructure from CB fields if present
                 if (employee.CB_Basic.HasValue && employee.CB_Basic > 0)
                 {

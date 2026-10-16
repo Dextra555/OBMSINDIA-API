@@ -644,6 +644,102 @@ namespace OBMS.WebAPI.Controllers
             }
         }
 
+        [HttpPost("saveAndUpdateTDSSConfiguration")]
+        public async Task<IActionResult> SaveAndUpdateTDSConfiguration([FromBody] System.Text.Json.JsonElement tdsConfig)
+        {
+            try
+            {
+                int id = 0;
+                if (tdsConfig.TryGetProperty("id", out var idProp) && idProp.ValueKind != System.Text.Json.JsonValueKind.Null)
+                    id = idProp.GetInt32();
+
+                string financialYear = tdsConfig.TryGetProperty("financialYear", out var fyProp) ? fyProp.GetString() ?? "2024-2025" : "2024-2025";
+                decimal minIncome   = tdsConfig.TryGetProperty("minIncome", out var minProp) ? minProp.GetDecimal() : 0m;
+                decimal? maxIncome  = (tdsConfig.TryGetProperty("maxIncome", out var maxProp) && maxProp.ValueKind != System.Text.Json.JsonValueKind.Null)
+                                        ? maxProp.GetDecimal() : (decimal?)null;
+                decimal taxRate     = tdsConfig.TryGetProperty("taxRate", out var taxProp) ? taxProp.GetDecimal() : 0m;
+                decimal surchRate   = tdsConfig.TryGetProperty("surchargeRate", out var surProp) ? surProp.GetDecimal() : 0m;
+                decimal eduCess     = tdsConfig.TryGetProperty("educationCessRate", out var eduProp) ? eduProp.GetDecimal() : 4m;
+                decimal higherCess  = tdsConfig.TryGetProperty("higherEducationCessRate", out var higherProp) ? higherProp.GetDecimal() : 0m;
+                bool isActive       = !tdsConfig.TryGetProperty("isActive", out var activeProp) || activeProp.GetBoolean();
+
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+
+                    string query;
+                    if (id > 0)
+                    {
+                        query = @"UPDATE TDSSlabConfiguration
+                                  SET Financial_Year             = @FinancialYear,
+                                      Min_Income                 = @MinIncome,
+                                      Max_Income                 = @MaxIncome,
+                                      Tax_Rate                   = @TaxRate,
+                                      Surcharge_Rate             = @SurchargeRate,
+                                      Education_Cess_Rate        = @EducationCessRate,
+                                      Higher_Education_Cess_Rate = @HigherEducationCessRate,
+                                      Is_Active                  = @IsActive
+                                  WHERE Id = @Id";
+                    }
+                    else
+                    {
+                        query = @"INSERT INTO TDSSlabConfiguration
+                                      (Financial_Year, Min_Income, Max_Income, Tax_Rate,
+                                       Surcharge_Rate, Education_Cess_Rate, Higher_Education_Cess_Rate,
+                                       Is_Active, Created_Date)
+                                  VALUES
+                                      (@FinancialYear, @MinIncome, @MaxIncome, @TaxRate,
+                                       @SurchargeRate, @EducationCessRate, @HigherEducationCessRate,
+                                       @IsActive, GETDATE())";
+                    }
+
+                    using (var command = new SqlCommand(query, connection))
+                    {
+                        if (id > 0)
+                            command.Parameters.AddWithValue("@Id", id);
+
+                        command.Parameters.AddWithValue("@FinancialYear", financialYear);
+                        command.Parameters.AddWithValue("@MinIncome", minIncome);
+                        command.Parameters.AddWithValue("@MaxIncome", maxIncome.HasValue ? (object)maxIncome.Value : DBNull.Value);
+                        command.Parameters.AddWithValue("@TaxRate", taxRate);
+                        command.Parameters.AddWithValue("@SurchargeRate", surchRate);
+                        command.Parameters.AddWithValue("@EducationCessRate", eduCess);
+                        command.Parameters.AddWithValue("@HigherEducationCessRate", higherCess);
+                        command.Parameters.AddWithValue("@IsActive", isActive);
+
+                        await command.ExecuteNonQueryAsync();
+                    }
+                }
+
+                return Ok(new { message = id > 0 ? "TDS slab updated successfully" : "TDS slab created successfully" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error saving TDS configuration", error = ex.Message });
+            }
+        }
+
+        [HttpDelete("DeleteTDSSlabById")]
+        public async Task<IActionResult> DeleteTDSSlabById(int Id)
+        {
+            try
+            {
+                using (var connection = new SqlConnection(_connectionString))
+                {
+                    await connection.OpenAsync();
+                    var command = new SqlCommand(
+                        "UPDATE TDSSlabConfiguration SET Is_Active = 0 WHERE Id = @Id", connection);
+                    command.Parameters.AddWithValue("@Id", Id);
+                    await command.ExecuteNonQueryAsync();
+                }
+                return Ok(new { message = "TDS slab deleted successfully" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error deleting TDS slab", error = ex.Message });
+            }
+        }
+
         #endregion
 
         #region GST Configuration

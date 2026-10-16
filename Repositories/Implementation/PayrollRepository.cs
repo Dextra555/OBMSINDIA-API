@@ -3687,7 +3687,13 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, employeeData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
-                    var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
+                    // TDS: only calculate when TDSApplicable = true for this employee
+                    decimal monthlyTDS = 0m;
+                    if (employeeData.emp.TDSApplicable)
+                    {
+                        var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
+                        monthlyTDS = Math.Round(tdsResult.MonthlyTDS, 2);
+                    }
 
                     // Calculate actual days in the period month and subtract Absent days (Type = 7)
                     int actualDays = DateTime.DaysInMonth(periodDate.Year, periodDate.Month);
@@ -3756,11 +3762,15 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                         professionalTax = Math.Round(ptResult.TaxAmount, 2),
 
-                        incomeTax = Math.Round(tdsResult.MonthlyTDS, 2),
+                        incomeTax = Math.Round(monthlyTDS, 2),
 
-                        totalDeductions = Math.Round(pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount + tdsResult.MonthlyTDS, 2),
+                        tds = Math.Round(monthlyTDS, 2),
 
-                        netSalary = Math.Round(grossSalary - (pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount + tdsResult.MonthlyTDS), 2),
+                        tdsApplicable = employeeData.emp.TDSApplicable,
+
+                        totalDeductions = Math.Round(pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount + monthlyTDS, 2),
+
+                        netSalary = Math.Round(grossSalary - (pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount + monthlyTDS), 2),
 
                         netSalaryWords = "",
 
@@ -3864,6 +3874,14 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, guardData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
+                    // TDS: only calculate when TDSApplicable = true
+                    decimal guard1MonthlyTDS = 0m;
+                    if (guardData.emp.TDSApplicable)
+                    {
+                        var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
+                        guard1MonthlyTDS = Math.Round(tdsResult.MonthlyTDS, 2);
+                    }
+
                     // Calculate actual days in the period month and subtract Absent days (Type = 7)
                     int guard1ActualDays = DateTime.DaysInMonth(periodDate.Year, periodDate.Month);
                     int guard1AbsentDays = await _oBMSDbContext.AttendanceDetails
@@ -3903,9 +3921,13 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                         professionalTax = Math.Round(ptResult.TaxAmount, 2),
 
-                        totalDeductions = Math.Round(pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount, 2),
+                        tds = Math.Round(guard1MonthlyTDS, 2),
 
-                        netSalary = Math.Round(grossSalary - (pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount), 2),
+                        tdsApplicable = guardData.emp.TDSApplicable,
+
+                        totalDeductions = Math.Round(pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount + guard1MonthlyTDS, 2),
+
+                        netSalary = Math.Round(grossSalary - (pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount + guard1MonthlyTDS), 2),
 
                         netSalaryWords = ""
 
@@ -3975,6 +3997,14 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, guardData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
+                    // TDS: only calculate when TDSApplicable = true
+                    decimal guard2MonthlyTDS = 0m;
+                    if (guardData.emp.TDSApplicable)
+                    {
+                        var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
+                        guard2MonthlyTDS = Math.Round(tdsResult.MonthlyTDS, 2);
+                    }
+
                     // Calculate actual days in the period month and subtract Absent days (Type = 7)
                     int guard2ActualDays = DateTime.DaysInMonth(periodDate.Year, periodDate.Month);
                     int guard2AbsentDays = await _oBMSDbContext.AttendanceDetails
@@ -4016,9 +4046,13 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                         professionalTax = Math.Round(ptResult.TaxAmount, 2),
 
-                        totalDeductions = Math.Round(pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount, 2),
+                        tds = Math.Round(guard2MonthlyTDS, 2),
 
-                        netSalary = Math.Round(grossSalary - (pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount), 2),
+                        tdsApplicable = guardData.emp.TDSApplicable,
+
+                        totalDeductions = Math.Round(pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount + guard2MonthlyTDS, 2),
+
+                        netSalary = Math.Round(grossSalary - (pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount + guard2MonthlyTDS), 2),
 
                         netSalaryWords = ""
 
@@ -4088,7 +4122,13 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, rbaData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
-                    var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
+                    // TDS: only calculate when TDSApplicable = true for this employee
+                    decimal monthlyTDS = 0m;
+                    if (rbaData.emp.TDSApplicable)
+                    {
+                        var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
+                        monthlyTDS = Math.Round(tdsResult.MonthlyTDS, 2);
+                    }
 
                     // Calculate actual days in the period month and subtract Absent days (Type = 7)
                     int rbaActualDays = DateTime.DaysInMonth(periodDate.Year, periodDate.Month);
@@ -4131,11 +4171,15 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                         professionalTax = Math.Round(ptResult.TaxAmount, 2),
 
-                        incomeTax = Math.Round(tdsResult.MonthlyTDS, 2),
+                        incomeTax = Math.Round(monthlyTDS, 2),
 
-                        totalDeductions = Math.Round(pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount + tdsResult.MonthlyTDS, 2),
+                        tds = Math.Round(monthlyTDS, 2),
 
-                        netSalary = Math.Round(grossSalary - (pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount + tdsResult.MonthlyTDS), 2),
+                        tdsApplicable = rbaData.emp.TDSApplicable,
+
+                        totalDeductions = Math.Round(pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount + monthlyTDS, 2),
+
+                        netSalary = Math.Round(grossSalary - (pfResult.EmployeeContribution + esiResult.EmployeeContribution + ptResult.TaxAmount + monthlyTDS), 2),
 
                         netSalaryWords = ""
 

@@ -221,6 +221,14 @@ namespace OBMS.WebAPI.Models.Domain
         public virtual Department? Department { get; set; }
         public virtual Designation? Designation { get; set; }
 
+        /// <summary>
+        /// Controls whether TDS is calculated and deducted for this employee.
+        /// 0 = No (default for all employees), 1 = Yes.
+        /// When Yes, monthly TDS is computed from TDSSlabConfiguration and stored in PaySlip.TDS.
+        /// </summary>
+        [Column("TDSApplicable")]
+        public bool TDSApplicable { get; set; } = false;
+
         // CB (Cost Breakdown) Properties - Simplified
         [Column("CB_Basic")]
         public decimal? CB_Basic { get; set; }

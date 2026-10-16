@@ -1926,15 +1926,7 @@ namespace OBMS.WebAPI.Controllers
 
                 {
 
-                    // Use pre-calculated age from GetPayrollRows and check if above 55
-
                     int age = (int)(r.age ?? 0);
-
-                    bool isAbove55 = age >= 55;
-
-
-
-                    // Apply age-based logic: EPS = 0 and PF salary = 0 if age > 55
 
                     decimal epfWages = (decimal)r.epfWages;
 
@@ -1953,28 +1945,6 @@ namespace OBMS.WebAPI.Controllers
                     decimal refundOfAdvances = 0; // TODO: Get from salary advances
 
                     decimal numberOfDays = (int)r.daysWorked;
-
-
-
-                    if (isAbove55)
-
-                    {
-
-                        epfWages = 0;
-
-                        epsWages = 0;
-
-                        edliWages = 0;
-
-                        epfContributionRemitted = 0;
-
-                        epsContributionRemitted = 0;
-
-                        epfDifference = 0;
-
-                    }
-
-
 
                     return new
 
@@ -2008,9 +1978,7 @@ namespace OBMS.WebAPI.Controllers
 
                         numberOfDays = numberOfDays,
 
-                        age = age,
-
-                        isAbove55 = isAbove55
+                        age = age
 
                     };
 

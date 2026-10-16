@@ -275,7 +275,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                             sbQuery.Append(" SalaryStructure.WorkingDays, SalaryStructure.GeneralDayOTRate, SalaryStructure.OffDayRate, SalaryStructure.OffDayOTRate, ");
                                             sbQuery.Append(" SalaryStructure.HolidayRate, SalaryStructure.HolidayOTRate, ");
                                             sbQuery.Append(" SalaryStructure.SalaryBand, SalaryStructure.EICC, salarystructure.NonStructure, Employee.NewSalaryStructure, Employee.SalaryStructure1000_3h, Employee.EMP_PASSPORT_NO, ");
-                                            sbQuery.Append(" Employee.CB_Basic, Employee.CB_DA, Employee.CB_HRA, Employee.CB_HRAPercentage, Employee.CB_OtherAllowances, Employee.CB_NH, Employee.CB_NHPercentage, Employee.CB_AdvanceStatutoryBonus, Employee.CB_SubTotal, Employee.CB_Leaves, Employee.IndianState, Employee.EMP_ROLE, ISNULL(cm.ClientComplianceStatus,'') AS ClientComplianceStatus from Employee ");
+                                            sbQuery.Append(" Employee.CB_Basic, Employee.CB_DA, Employee.CB_HRA, Employee.CB_HRAPercentage, Employee.CB_OtherAllowances, Employee.CB_NH, Employee.CB_NHPercentage, Employee.CB_AdvanceStatutoryBonus, Employee.CB_SubTotal, Employee.CB_Leaves, Employee.IndianState, Employee.EMP_ROLE, ISNULL(cm.ClientComplianceStatus,'') AS ClientComplianceStatus, Employee.TDSApplicable from Employee ");
                                             sbQuery.Append("LEFT JOIN EmploymentDetails ON EmploymentDetails.EMPPAY_CODE = Employee.EMP_CODE ");
                                             sbQuery.Append("LEFT JOIN EmployeeSalaryDetails ON EmployeeSalaryDetails.EMPFL_CODE = Employee.EMP_CODE ");
                                             sbQuery.Append("LEFT JOIN SalaryStructure ON SalaryStructure.SalaryID = EmploymentDetails.Salarylab ");
@@ -313,6 +313,9 @@ namespace OBMS.WebAPI.BusinessObjects
                                             // TotalDeduction + NetPay
                                             decimal dTotalDeduction = 0;
                                             decimal dNetPay = 0;
+                                            // TDS
+                                            decimal dTDS = 0;
+                                            bool bTDSApplicable = false;
                                             int EmployeeAge = 0;
                                             int strCitizen = 0;
                                             decimal NoOfWorkingDays = 0;
@@ -397,6 +400,8 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 // Read EMP_ROLE + ClientComplianceStatus for PF eligibility
                                                 sEmpRole = drEmployee.IsDBNull(drEmployee.GetOrdinal("EMP_ROLE")) ? string.Empty : drEmployee.GetString(drEmployee.GetOrdinal("EMP_ROLE")).Trim();
                                                 sClientComplianceStatus = drEmployee.IsDBNull(drEmployee.GetOrdinal("ClientComplianceStatus")) ? string.Empty : drEmployee.GetString(drEmployee.GetOrdinal("ClientComplianceStatus")).Trim();
+                                                // Read TDSApplicable flag
+                                                bTDSApplicable = drEmployee.IsDBNull(drEmployee.GetOrdinal("TDSApplicable")) ? false : drEmployee.GetBoolean(drEmployee.GetOrdinal("TDSApplicable"));
 
                                                 if (drEmployee["SalaryStructure1000_3h"] == DBNull.Value)
                                                 {
@@ -3581,6 +3586,47 @@ namespace OBMS.WebAPI.BusinessObjects
                                             decimal dMonthLeave = Math.Round(dGrossPay - dEarnedSalary, 2);
                                             if (dMonthLeave < 0) dMonthLeave = 0; // safety: never negative
 
+                                            // ── TDS Calculation ──────────────────────────────────────────────────
+                                            // Only calculate when Employee.TDSApplicable = true
+                                            dTDS = 0;
+                                            if (bTDSApplicable)
+                                            {
+                                                decimal annualIncome = dGrossPay * 12;
+                                                decimal basicExemption = 250000m; // Age group 1 (below 60) default
+                                                if (EmployeeAge >= 80) basicExemption = 500000m;
+                                                else if (EmployeeAge >= 60) basicExemption = 300000m;
+
+                                                decimal taxableIncome = Math.Max(0, annualIncome - basicExemption);
+                                                if (taxableIncome > 0)
+                                                {
+                                                    // Fetch slabs from DB inline
+                                                    decimal annualTax = 0;
+                                                    SqlCommand cmdTDS = new SqlCommand(
+                                                        "SELECT Min_Income, Max_Income, Tax_Rate FROM TDSSlabConfiguration WHERE Is_Active = 1 ORDER BY Min_Income");
+                                                    using (SQLDataAccess sdaTDS = new SQLDataAccess(_configuration))
+                                                    using (SqlDataReader drTDS = sdaTDS.RetrieveData(cmdTDS))
+                                                    {
+                                                        decimal remaining = taxableIncome;
+                                                        while (drTDS.Read() && remaining > 0)
+                                                        {
+                                                            decimal minIncome = drTDS.GetDecimal(drTDS.GetOrdinal("Min_Income"));
+                                                            decimal? maxIncome = drTDS.IsDBNull(drTDS.GetOrdinal("Max_Income")) ? (decimal?)null : drTDS.GetDecimal(drTDS.GetOrdinal("Max_Income"));
+                                                            decimal taxRate = drTDS.GetDecimal(drTDS.GetOrdinal("Tax_Rate"));
+
+                                                            decimal slabIncome = maxIncome.HasValue
+                                                                ? Math.Min(remaining, maxIncome.Value - minIncome)
+                                                                : remaining;
+                                                            annualTax += slabIncome * taxRate / 100m;
+                                                            remaining -= slabIncome;
+                                                        }
+                                                    }
+                                                    // 4% Education Cess
+                                                    annualTax = annualTax * 1.04m;
+                                                    dTDS = Math.Round(annualTax / 12m, 2);
+                                                }
+                                            }
+                                            // ─────────────────────────────────────────────────────────────────────
+
                                             dTotalDeduction = Math.Round(
                                                 dPF
                                                 + dESI
@@ -3591,7 +3637,8 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 + dMiscDeductions
                                                 + dMonthLeave
                                                 + dPTax
-                                                + dLWF,
+                                                + dLWF
+                                                + dTDS,
                                                 2);
 
                                             dNetPay = Math.Round(dGrossPay - dTotalDeduction, 2);
@@ -3643,7 +3690,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 sbQuery.Append(" EPFEmployerContribution, SOCSOEmployerContribution, ");
                                                 sbQuery.Append(" DailyAdvanceRecovery, MonthlyAdvanceRecovery,SpecialAdvanceRecovery, UniformIssueRecovery, LoanRecovery,IncomeTaxDeduction, ");
                                                 sbQuery.Append(" MiscAmount, MiscDeduction,Bonus,SalaryPayMode, ");
-                                                sbQuery.Append(" LastUpdate,LastUpdatedBy,SIPEmployeeContribution,SIPEmployerContribution,PTax,EarnedSalary,PerDaySalary,PF,PFWage,ESI,ESIWage,GrossPay,LWF,TotalDeduction,NetPay) VALUES (@Period, @EmployeeID, @BasicSalaryDays,@BasicSalaryRate,@BasicSalary, ");
+                                                sbQuery.Append(" LastUpdate,LastUpdatedBy,SIPEmployeeContribution,SIPEmployerContribution,PTax,EarnedSalary,PerDaySalary,PF,PFWage,ESI,ESIWage,GrossPay,LWF,TotalDeduction,NetPay,TDS) VALUES (@Period, @EmployeeID, @BasicSalaryDays,@BasicSalaryRate,@BasicSalary, ");
                                                 sbQuery.Append(" @OverTimeSalaryHours,@OverTimeSalaryRate,@OverTimeSalary,@OffDaySalaryDays,@OffDaySalaryRate,@OffDaySalary, ");
                                                 sbQuery.Append(" @OffDayOverTimeSalaryHours,@OffDayOverTimeSalaryRate,@OffDayOverTimeSalary,@HolidaySalaryDays, ");
                                                 sbQuery.Append(" @HolidaySalaryRate,@HolidaySalary,@HolidayOverTimeSalaryHours,@HolidayOverTimeSalaryRate, ");
@@ -3652,7 +3699,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 sbQuery.Append(" @EPFEmployerContribution, @SOCSOEmployerContribution, ");
                                                 sbQuery.Append(" @DailyAdvanceRecovery, @MonthlyAdvanceRecovery,@SpecialAdvanceRecovery, @UniformIssueRecovery, @LoanRecovery, @IncomeTaxDeduction, ");
                                                 sbQuery.Append(" @MiscAmount, @MiscDeduction,@Bonus, @SalaryPayMode, ");
-                                                sbQuery.Append(" @LASTUPDATE,@LastUpdatedBy,@SIPEmployeeContribution,@SIPEmployerContribution,@PTax,@EarnedSalary,@PerDaySalary,@PF,@PFWage,@ESI,@ESIWage,@GrossPay,@LWF,@TotalDeduction,@NetPay); SELECT SCOPE_IDENTITY()");
+                                                sbQuery.Append(" @LASTUPDATE,@LastUpdatedBy,@SIPEmployeeContribution,@SIPEmployerContribution,@PTax,@EarnedSalary,@PerDaySalary,@PF,@PFWage,@ESI,@ESIWage,@GrossPay,@LWF,@TotalDeduction,@NetPay,@TDS); SELECT SCOPE_IDENTITY()");
                                                 cmdPaySlip.CommandText = sbQuery.ToString();
                                                 cmdPaySlip.Parameters.AddWithValue("@Period", Period);
                                                 cmdPaySlip.Parameters.AddWithValue("@EmployeeID", EmployeeID);
@@ -3719,6 +3766,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 cmdPaySlip.Parameters.AddWithValue("@LWF", dLWF);
                                                 cmdPaySlip.Parameters.AddWithValue("@TotalDeduction", dTotalDeduction);
                                                 cmdPaySlip.Parameters.AddWithValue("@NetPay", dNetPay);
+                                                cmdPaySlip.Parameters.AddWithValue("@TDS", dTDS);
                                                 SqlDataReader drTemp = sdaPaySlip.RetrieveData(cmdPaySlip);
                                                 drTemp.Read();
                                                 decimal dPaySlipID = drTemp.GetDecimal(0);
@@ -3758,7 +3806,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                             sbQuery.Append(" EPFEmployerContribution, SOCSOEmployerContribution, ");
                                             sbQuery.Append(" DailyAdvanceRecovery, MonthlyAdvanceRecovery,SpecialAdvanceRecovery, UniformIssueRecovery, LoanRecovery,IncomeTaxDeduction, ");
                                             sbQuery.Append(" MiscAmount, MiscDeduction,Bonus,SalaryPayMode, ");
-                                            sbQuery.Append(" LastUpdate,LastUpdatedBy,Version,SIPEmployeeContribution,SIPEmployerContribution,PTax,EarnedSalary,PerDaySalary,PF,PFWage,ESI,ESIWage,GrossPay,LWF,TotalDeduction,NetPay) VALUES (@Period, @EmployeeID, @BasicSalaryDays,@BasicSalaryRate,@BasicSalary, ");
+                                            sbQuery.Append(" LastUpdate,LastUpdatedBy,Version,SIPEmployeeContribution,SIPEmployerContribution,PTax,EarnedSalary,PerDaySalary,PF,PFWage,ESI,ESIWage,GrossPay,LWF,TotalDeduction,NetPay,TDS) VALUES (@Period, @EmployeeID, @BasicSalaryDays,@BasicSalaryRate,@BasicSalary, ");
                                             sbQuery.Append(" @OverTimeSalaryHours,@OverTimeSalaryRate,@OverTimeSalary,@OffDaySalaryDays,@OffDaySalaryRate,@OffDaySalary, ");
                                             sbQuery.Append(" @OffDayOverTimeSalaryHours,@OffDayOverTimeSalaryRate,@OffDayOverTimeSalary,@HolidaySalaryDays, ");
                                             sbQuery.Append(" @HolidaySalaryRate,@HolidaySalary,@HolidayOverTimeSalaryHours,@HolidayOverTimeSalaryRate, ");
@@ -3767,7 +3815,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                             sbQuery.Append(" @EPFEmployerContribution, @SOCSOEmployerContribution, ");
                                             sbQuery.Append(" @DailyAdvanceRecovery, @MonthlyAdvanceRecovery,@SpecialAdvanceRecovery, @UniformIssueRecovery, @LoanRecovery, @IncomeTaxDeduction, ");
                                             sbQuery.Append(" @MiscAmount, @MiscDeduction,@Bonus, @SalaryPayMode, ");
-                                            sbQuery.Append(" @LASTUPDATE,@LastUpdatedBy,@Version,@SIPEmployeeContribution,@SIPEmployerContribution,@PTax,@EarnedSalary,@PerDaySalary,@PF,@PFWage,@ESI,@ESIWage,@GrossPay,@LWF,@TotalDeduction,@NetPay)");
+                                            sbQuery.Append(" @LASTUPDATE,@LastUpdatedBy,@Version,@SIPEmployeeContribution,@SIPEmployerContribution,@PTax,@EarnedSalary,@PerDaySalary,@PF,@PFWage,@ESI,@ESIWage,@GrossPay,@LWF,@TotalDeduction,@NetPay,@TDS)");
 
                                             SqlCommand cmdPaySlipAudit = new SqlCommand();
                                             cmdPaySlipAudit.CommandText = sbQuery.ToString();
@@ -3829,6 +3877,7 @@ namespace OBMS.WebAPI.BusinessObjects
                                             cmdPaySlipAudit.Parameters.AddWithValue("@LWF", dLWF);
                                             cmdPaySlipAudit.Parameters.AddWithValue("@TotalDeduction", dTotalDeduction);
                                             cmdPaySlipAudit.Parameters.AddWithValue("@NetPay", dNetPay);
+                                            cmdPaySlipAudit.Parameters.AddWithValue("@TDS", dTDS);
 
                                             sdaPaySlip.ExecuteSQL(cmdPaySlipAudit);
                                             cmdPaySlipAudit.Dispose();

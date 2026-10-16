@@ -49,5 +49,10 @@
         public string LastUpdatedBy { get; set; }
         public decimal? SIPEmployeeContribution { get; set; }
         public decimal? SIPEmployerContribution { get; set; }
+
+        /// <summary>
+        /// Monthly TDS deducted. 0 when TDSApplicable = false; calculated from slabs when true.
+        /// </summary>
+        public decimal TDS { get; set; } = 0;
     }
 }

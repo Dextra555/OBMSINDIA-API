@@ -1767,7 +1767,10 @@ var employment = _oBMSDbContext.EmploymentDetails.AsNoTracking().Where(x => x.EM
 
                     BankName = employeeDto.BankName,
 
-                    UPIId = employeeDto.UPIId ?? ""
+                    UPIId = employeeDto.UPIId ?? "",
+
+                    // TDS Deduction Control
+                    TDSApplicable = employeeDto.TDSApplicable
 
                 };
 
@@ -2140,7 +2143,8 @@ var employment = _oBMSDbContext.EmploymentDetails.AsNoTracking().Where(x => x.EM
 
                 employee.UPIId = employeeDto.UPIId;
 
-
+                // TDS Deduction Control
+                employee.TDSApplicable = employeeDto.TDSApplicable;
 
                 // Update Commercial Breakdown (CB) fields
 
