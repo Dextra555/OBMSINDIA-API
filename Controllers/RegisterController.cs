@@ -591,7 +591,7 @@ namespace OBMS.WebAPI.Controllers
             catch (Exception ex)
             {
                 // Handle exceptions appropriately
-                return StatusCode(500, "An error occurred while processing the request.");
+                return StatusCode(500, $"An error occurred while processing the request: {ex.Message}");
             }
         }
 

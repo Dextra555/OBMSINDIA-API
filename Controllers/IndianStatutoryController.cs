@@ -9,6 +9,21 @@ using OBMS.WebAPI.Models;
 
 namespace OBMS.WebAPI.Controllers
 {
+    // DTO matching Angular PFConfiguration interface property names
+    public class PFConfigurationRequest
+    {
+        public int Id { get; set; }
+        public decimal BasicSalaryLimit { get; set; }
+        public decimal EmployeeContributionRate { get; set; }
+        public decimal EmployerContributionRate { get; set; }
+        public decimal EmployerEPSRate { get; set; }
+        public string FinancialYear { get; set; } = "2024-2025";
+        public DateTime EffectiveDate { get; set; }
+        public bool IsActive { get; set; } = true;
+        public string? CreatedBy { get; set; }
+        public string? LastUpdatedBy { get; set; }
+    }
+
     [ApiController]
     [Route("api/statutory")]
     public class IndianStatutoryController : ControllerBase
@@ -79,10 +94,13 @@ namespace OBMS.WebAPI.Controllers
         }
 
         [HttpPost("pf-configuration")]
-        public async Task<IActionResult> SavePFConfiguration([FromBody] dynamic pfConfig)
+        public async Task<IActionResult> SavePFConfiguration([FromBody] PFConfigurationRequest pfConfig)
         {
             try
             {
+                if (pfConfig == null)
+                    return BadRequest(new { message = "Invalid PF configuration data" });
+
                 using (var connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
@@ -96,13 +114,13 @@ namespace OBMS.WebAPI.Controllers
 
                     using (var command = new SqlCommand(query, connection))
                     {
-                        command.Parameters.AddWithValue("@EmployeeRate", (decimal)pfConfig.EmployeeContributionRate);
-                        command.Parameters.AddWithValue("@EmployerRate", (decimal)pfConfig.EmployerContributionRate);
-                        command.Parameters.AddWithValue("@EmployerEPSRate", (decimal)pfConfig.EmployerEPSRate);
-                        command.Parameters.AddWithValue("@BasicSalaryLimit", (decimal)pfConfig.BasicSalaryLimit);
-                        command.Parameters.AddWithValue("@EffectiveDate", DateTime.Parse(pfConfig.EffectiveDate.ToString()));
-                        command.Parameters.AddWithValue("@IsActive", true);
-                        command.Parameters.AddWithValue("@FinancialYear", pfConfig.FinancialYear?.ToString() ?? "2024-2025");
+                        command.Parameters.AddWithValue("@EmployeeRate", pfConfig.EmployeeContributionRate);
+                        command.Parameters.AddWithValue("@EmployerRate", pfConfig.EmployerContributionRate);
+                        command.Parameters.AddWithValue("@EmployerEPSRate", pfConfig.EmployerEPSRate);
+                        command.Parameters.AddWithValue("@BasicSalaryLimit", pfConfig.BasicSalaryLimit);
+                        command.Parameters.AddWithValue("@EffectiveDate", pfConfig.EffectiveDate);
+                        command.Parameters.AddWithValue("@IsActive", pfConfig.IsActive);
+                        command.Parameters.AddWithValue("@FinancialYear", pfConfig.FinancialYear ?? "2024-2025");
 
                         await command.ExecuteNonQueryAsync();
                     }
@@ -117,10 +135,13 @@ namespace OBMS.WebAPI.Controllers
         }
 
         [HttpPut("pf-configuration/{id}")]
-        public async Task<IActionResult> UpdatePFConfiguration(int id, [FromBody] dynamic pfConfig)
+        public async Task<IActionResult> UpdatePFConfiguration(int id, [FromBody] PFConfigurationRequest pfConfig)
         {
             try
             {
+                if (pfConfig == null)
+                    return BadRequest(new { message = "Invalid PF configuration data" });
+
                 using (var connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
@@ -139,12 +160,12 @@ namespace OBMS.WebAPI.Controllers
                     using (var command = new SqlCommand(query, connection))
                     {
                         command.Parameters.AddWithValue("@Id", id);
-                        command.Parameters.AddWithValue("@EmployeeRate", (decimal)pfConfig.EmployeeContributionRate);
-                        command.Parameters.AddWithValue("@EmployerRate", (decimal)pfConfig.EmployerContributionRate);
-                        command.Parameters.AddWithValue("@EmployerEPSRate", (decimal)pfConfig.EmployerEPSRate);
-                        command.Parameters.AddWithValue("@BasicSalaryLimit", (decimal)pfConfig.BasicSalaryLimit);
-                        command.Parameters.AddWithValue("@EffectiveDate", DateTime.Parse(pfConfig.EffectiveDate.ToString()));
-                        command.Parameters.AddWithValue("@FinancialYear", pfConfig.FinancialYear?.ToString() ?? "2024-2025");
+                        command.Parameters.AddWithValue("@EmployeeRate", pfConfig.EmployeeContributionRate);
+                        command.Parameters.AddWithValue("@EmployerRate", pfConfig.EmployerContributionRate);
+                        command.Parameters.AddWithValue("@EmployerEPSRate", pfConfig.EmployerEPSRate);
+                        command.Parameters.AddWithValue("@BasicSalaryLimit", pfConfig.BasicSalaryLimit);
+                        command.Parameters.AddWithValue("@EffectiveDate", pfConfig.EffectiveDate);
+                        command.Parameters.AddWithValue("@FinancialYear", pfConfig.FinancialYear ?? "2024-2025");
 
                         await command.ExecuteNonQueryAsync();
                     }
@@ -236,30 +257,47 @@ namespace OBMS.WebAPI.Controllers
             }
         }
 
+        // DTO for ESI save/update requests
+        public class EsiConfigurationRequest
+        {
+            public decimal GrossSalaryLimit { get; set; }
+            public decimal EmployeeContributionRate { get; set; }
+            public decimal EmployerContributionRate { get; set; }
+            public string EffectiveDate { get; set; } = string.Empty;
+            public bool IsActive { get; set; } = true;
+        }
+
         [HttpPost("esi-configuration")]
-        public async Task<IActionResult> SaveESIConfiguration([FromBody] dynamic esiConfig)
+        public async Task<IActionResult> SaveESIConfiguration([FromBody] EsiConfigurationRequest esiConfig)
         {
             try
             {
+                if (esiConfig == null)
+                    return BadRequest(new { message = "Invalid request body" });
+
+                var effectiveDate = DateTime.Parse(esiConfig.EffectiveDate);
+                var fyStart = effectiveDate.Month >= 4 ? effectiveDate.Year : effectiveDate.Year - 1;
+                var financialYear = $"{fyStart}-{fyStart + 1}";
+
                 using (var connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    
+
                     var query = @"
                         INSERT INTO ESIConfiguration 
-                        (GrossSalaryLimit, EmployeeContributionRate, EmployerContributionRate,
-                         EffectiveDate, IsActive, CreatedBy, CreatedDate)
-                        VALUES (@GrossSalaryLimit, @EmployeeContributionRate, @EmployerContributionRate,
-                                @EffectiveDate, @IsActive, @CreatedBy, GETDATE())";
+                        (Gross_Salary_Limit, Employee_Rate, Employer_Rate,
+                         Effective_Date, Is_Active, Created_Date, Financial_Year)
+                        VALUES (@GrossSalaryLimit, @EmployeeRate, @EmployerRate,
+                                @EffectiveDate, @IsActive, GETDATE(), @FinancialYear)";
 
                     using (var command = new SqlCommand(query, connection))
                     {
-                        command.Parameters.AddWithValue("@GrossSalaryLimit", (decimal)esiConfig.GrossSalaryLimit);
-                        command.Parameters.AddWithValue("@EmployeeContributionRate", (decimal)esiConfig.EmployeeContributionRate);
-                        command.Parameters.AddWithValue("@EmployerContributionRate", (decimal)esiConfig.EmployerContributionRate);
-                        command.Parameters.AddWithValue("@EffectiveDate", DateTime.Parse(esiConfig.EffectiveDate.ToString()));
-                        command.Parameters.AddWithValue("@IsActive", true);
-                        command.Parameters.AddWithValue("@CreatedBy", "SYSTEM");
+                        command.Parameters.AddWithValue("@GrossSalaryLimit", esiConfig.GrossSalaryLimit);
+                        command.Parameters.AddWithValue("@EmployeeRate", esiConfig.EmployeeContributionRate);
+                        command.Parameters.AddWithValue("@EmployerRate", esiConfig.EmployerContributionRate);
+                        command.Parameters.AddWithValue("@EffectiveDate", effectiveDate);
+                        command.Parameters.AddWithValue("@IsActive", esiConfig.IsActive);
+                        command.Parameters.AddWithValue("@FinancialYear", financialYear);
 
                         await command.ExecuteNonQueryAsync();
                     }
@@ -274,32 +312,36 @@ namespace OBMS.WebAPI.Controllers
         }
 
         [HttpPut("esi-configuration/{id}")]
-        public async Task<IActionResult> UpdateESIConfiguration(int id, [FromBody] dynamic esiConfig)
+        public async Task<IActionResult> UpdateESIConfiguration(int id, [FromBody] EsiConfigurationRequest esiConfig)
         {
             try
             {
+                if (esiConfig == null)
+                    return BadRequest(new { message = "Invalid request body" });
+
+                var effectiveDate = DateTime.Parse(esiConfig.EffectiveDate);
+
                 using (var connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    
+
                     var query = @"
                         UPDATE ESIConfiguration 
-                        SET GrossSalaryLimit = @GrossSalaryLimit,
-                            EmployeeContributionRate = @EmployeeContributionRate,
-                            EmployerContributionRate = @EmployerContributionRate,
-                            EffectiveDate = @EffectiveDate,
-                            LastUpdatedDate = GETDATE(),
-                            LastUpdatedBy = @LastUpdatedBy
+                        SET Gross_Salary_Limit = @GrossSalaryLimit,
+                            Employee_Rate = @EmployeeRate,
+                            Employer_Rate = @EmployerRate,
+                            Effective_Date = @EffectiveDate,
+                            Is_Active = @IsActive
                         WHERE Id = @Id";
 
                     using (var command = new SqlCommand(query, connection))
                     {
                         command.Parameters.AddWithValue("@Id", id);
-                        command.Parameters.AddWithValue("@GrossSalaryLimit", (decimal)esiConfig.GrossSalaryLimit);
-                        command.Parameters.AddWithValue("@EmployeeContributionRate", (decimal)esiConfig.EmployeeContributionRate);
-                        command.Parameters.AddWithValue("@EmployerContributionRate", (decimal)esiConfig.EmployerContributionRate);
-                        command.Parameters.AddWithValue("@EffectiveDate", DateTime.Parse(esiConfig.EffectiveDate.ToString()));
-                        command.Parameters.AddWithValue("@LastUpdatedBy", "SYSTEM");
+                        command.Parameters.AddWithValue("@GrossSalaryLimit", esiConfig.GrossSalaryLimit);
+                        command.Parameters.AddWithValue("@EmployeeRate", esiConfig.EmployeeContributionRate);
+                        command.Parameters.AddWithValue("@EmployerRate", esiConfig.EmployerContributionRate);
+                        command.Parameters.AddWithValue("@EffectiveDate", effectiveDate);
+                        command.Parameters.AddWithValue("@IsActive", esiConfig.IsActive);
 
                         await command.ExecuteNonQueryAsync();
                     }

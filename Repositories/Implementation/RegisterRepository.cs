@@ -762,7 +762,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                 var existingRecord = await _dbContext.OBMSPermissions
 
-                    .Where(s => s.Name == oBMSPermission.Name && s.ScreenName == oBMSPermission.ScreenName).SingleOrDefaultAsync();
+                    .Where(s => s.Name == oBMSPermission.Name && s.ScreenName == oBMSPermission.ScreenName).FirstOrDefaultAsync();
 
 
 
@@ -830,7 +830,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                 var existingRecord = await _dbContext.OBMSBranches
 
-                    .Where(s => s.Name == oBMSBranche.Name && s.BranchCode == oBMSBranche.BranchCode).SingleOrDefaultAsync();
+                    .Where(s => s.Name == oBMSBranche.Name && s.BranchCode == oBMSBranche.BranchCode).FirstOrDefaultAsync();
 
 
 
@@ -974,7 +974,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                 var existingRecord = await _dbContext.OBMSBanks
 
-                    .Where(s => s.Name == oBMSBank.Name && s.BankID == oBMSBank.BankID).SingleOrDefaultAsync();
+                    .Where(s => s.Name == oBMSBank.Name && s.BankID == oBMSBank.BankID).FirstOrDefaultAsync();
 
 
 
@@ -1142,7 +1142,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
             {
 
-                var result = _dbContext.OBMSPermissions.Where(x => x.Name == userName && x.ScreenName == screenName).SingleOrDefault();
+                var result = _dbContext.OBMSPermissions.Where(x => x.Name == userName && x.ScreenName == screenName).FirstOrDefault();
 
                 return result ?? new OBMSPermissions();
 
