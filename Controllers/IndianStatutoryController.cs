@@ -153,7 +153,7 @@ namespace OBMS.WebAPI.Controllers
                             Employer_EPS_Rate = @EmployerEPSRate,
                             Basic_Salary_Limit = @BasicSalaryLimit,
                             Effective_Date = @EffectiveDate,
-                            LastUpdatedDate = GETDATE(),
+                            Is_Active = @IsActive,
                             Financial_Year = @FinancialYear
                         WHERE Id = @Id";
 
@@ -165,6 +165,7 @@ namespace OBMS.WebAPI.Controllers
                         command.Parameters.AddWithValue("@EmployerEPSRate", pfConfig.EmployerEPSRate);
                         command.Parameters.AddWithValue("@BasicSalaryLimit", pfConfig.BasicSalaryLimit);
                         command.Parameters.AddWithValue("@EffectiveDate", pfConfig.EffectiveDate);
+                        command.Parameters.AddWithValue("@IsActive", pfConfig.IsActive);
                         command.Parameters.AddWithValue("@FinancialYear", pfConfig.FinancialYear ?? "2024-2025");
 
                         await command.ExecuteNonQueryAsync();
