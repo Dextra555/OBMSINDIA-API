@@ -77,11 +77,14 @@ namespace OBMS.WebAPI.BusinessObjects
                         selectedDate = DateTime.Now; // Default to current date if parsing fails
                     }
                     
-                    string whereClause = " WHERE sa.IsDeleted = 0 AND MONTH(sa.AdvanceDate) = " + selectedDate.Month + " AND YEAR(sa.AdvanceDate) = " + selectedDate.Year;
+                    string whereClause = " WHERE sa.IsDeleted = 0 " +
+                                        " AND MONTH(sa.AdvanceDate) = " + selectedDate.Month +
+                                        " AND YEAR(sa.AdvanceDate) = " + selectedDate.Year +
+                                        " AND (esd.PAYMODE = 'Bank' OR (esd.PAYMODE IS NULL AND e.BankAccountNumber IS NOT NULL AND e.BankAccountNumber <> '')) ";
                     
                     if (!string.IsNullOrEmpty(branch) && branch != "ALL")
                     {
-                        whereClause += " AND e.EMP_BRANCH_CODE = @Branch ";
+                        whereClause += " AND ISNULL(esd.EMPFL_BRANCHCODE, e.EMP_BRANCH_CODE) = @Branch ";
                     }
                     
                     if (!string.IsNullOrEmpty(employeeType) && employeeType != "ALL")
@@ -95,9 +98,9 @@ namespace OBMS.WebAPI.BusinessObjects
                     "e.EMP_NAME as BeneficiaryName, " +
                     "SUM(sa.Amount) as TransactionAmount, " +
                     "e.EMP_ID as CustomerReferenceNumber, " +
-                    "ISNULL(esd.EMPFL_BRANCHCODE, '') as PayerAddress1, " +
-                    "ISNULL(NULLIF(e.IFSC_Code, ''), e.BankIFSC) as IFSCCode, " +
-                    "ISNULL(e.BankName, '') as BeneficiaryBankName, " +
+                    "ISNULL(esd.EMPFL_BRANCHCODE, e.EMP_BRANCH_CODE) as PayerAddress1, " +
+                    "ISNULL(NULLIF(e.IFSC_Code, ''), ISNULL(NULLIF(e.BankIFSC, ''), '')) as IFSCCode, " +
+                    "ISNULL(NULLIF(e.BankName, ''), '') as BeneficiaryBankName, " +
                     "ISNULL(e.BankBranch, '') as BeneficiaryBankBranchName, " +
                     "ISNULL(bm.Email, '') as BeneficiaryEmailId, " +
                     "ISNULL(bm.BankAccount, '') as PayerAccountNo, " +
@@ -113,7 +116,7 @@ namespace OBMS.WebAPI.BusinessObjects
                     "LEFT JOIN EmployeeSalaryDetails esd ON e.EMP_CODE = esd.EMPFL_CODE " +
                     "LEFT JOIN BranchMaster bm ON e.EMP_BRANCH_CODE = bm.Code " +
                     whereClause +
-                    " GROUP BY e.EMP_CODE, esd.EMPFL_BK_ACCNO, e.BankAccountNumber, e.EMP_NAME, e.EMP_ID, esd.EMPFL_BRANCHCODE, e.IFSC_Code, e.BankIFSC, e.BankName, e.BankBranch, bm.Email, bm.BankAccount, bm.Name, bm.Code, bm.Address1, bm.Address2, bm.City, bm.State, bm.PostCode " +
+                    " GROUP BY e.EMP_CODE, esd.EMPFL_BK_ACCNO, e.BankAccountNumber, e.EMP_NAME, e.EMP_ID, esd.EMPFL_BRANCHCODE, e.EMP_BRANCH_CODE, e.IFSC_Code, e.BankIFSC, e.BankName, e.BankBranch, bm.Email, bm.BankAccount, bm.Name, bm.Code, bm.Address1, bm.Address2, bm.City, bm.State, bm.PostCode, esd.PAYMODE " +
                     "ORDER BY e.EMP_NAME ";
                     
                     cmd.CommandText = query;
@@ -161,12 +164,12 @@ namespace OBMS.WebAPI.BusinessObjects
                                     PayerAddress9 = "",
                                     PayerAddress10 = "",
                                     ChargeBearer = "OUR",
-                                    ValueDate = DateTime.Now.ToString("dd/MM/yyyy"),  // DD/MM/YYYY — RBI portal format
+                                    ValueDate = DateTime.Now.ToString("dd/MM/yyyy", System.Globalization.CultureInfo.InvariantCulture),  // DD/MM/YYYY — forced slashes regardless of OS locale
                                     IFSCCode = dr["IFSCCode"]?.ToString() ?? "",
                                     BeneficiaryBankName = dr["BeneficiaryBankName"]?.ToString() ?? "",
                                     BeneficiaryBankBranchName = dr["BeneficiaryBankBranchName"]?.ToString() ?? "",
                                     BeneficiaryEmailId = "singam@fwg.my",
-                                    Narration = selectedDate.ToString("MMMM") + " Advance"  // e.g. "August Advance"
+                                    Narration = "Advance " + selectedDate.ToString("MMMM")  // e.g. "Advance September"
                                 };
                                 
                                 exportData.Add(item);
@@ -193,7 +196,8 @@ namespace OBMS.WebAPI.BusinessObjects
             // Data rows
             foreach (var item in exportData)
             {
-                csv.AppendLine($"{item.FieldType},{item.TransactionType},{item.BeneficiaryCode},{item.BeneficiaryAccountNumber},{item.TransactionAmount},{item.BeneficiaryName},{item.CustomerReferenceNumber},{item.PayerAccountNo},{item.PayerName},{item.PayerAddress1},{item.PayerAddress2},{item.PayerAddress3},{item.PayerAddress4},{item.PayerAddress5},{item.PayerAddress6},{item.PayerAddress7},{item.PayerAddress8},{item.PayerAddress9},{item.PayerAddress10},{item.ChargeBearer},{item.ValueDate},{item.IFSCCode},{item.BeneficiaryBankName},{item.BeneficiaryBankBranchName},{item.BeneficiaryEmailId}");
+                // Use ="value" format so Excel treats account numbers as text, preserving leading zeros
+                csv.AppendLine($"{item.FieldType},{item.TransactionType},{item.BeneficiaryCode},=\"{item.BeneficiaryAccountNumber}\",{item.TransactionAmount},{item.BeneficiaryName},{item.CustomerReferenceNumber},=\"{item.PayerAccountNo}\",{item.PayerName},{item.PayerAddress1},{item.PayerAddress2},{item.PayerAddress3},{item.PayerAddress4},{item.PayerAddress5},{item.PayerAddress6},{item.PayerAddress7},{item.PayerAddress8},{item.PayerAddress9},{item.PayerAddress10},{item.ChargeBearer},{item.ValueDate},{item.IFSCCode},{item.BeneficiaryBankName},{item.BeneficiaryBankBranchName},{item.BeneficiaryEmailId}");
             }
 
             return csv.ToString();
@@ -209,22 +213,39 @@ namespace OBMS.WebAPI.BusinessObjects
         // Indian Bank portal upload — text file format (Advance)
         // -----------------------------------------------------------------------
         // 28 comma-separated fields per record, no header row, CRLF, UTF-8 no BOM.
+        // Matches Excel formula columns B to AC (same as Salary format):
+        //   N,FREWA,{creditAcct},{Amount},{BenefName},,,,,,,,,{Narration},,,,,,,,,,{DD/MM/YYYY},,{IFSCCode},,,{Email}
         //
-        //  Pos  Portal Column Name      Value / Source
-        //  ---  ----------------------  ----------------------------------------
-        //   1   Payment Type            NEFT
-        //   2   Payment Product         ADVANCE
-        //   3   Debit Account           PayerAccountNo (company bank account)
-        //   4   Debit Amount            TransactionAmount (whole number)
-        //   5   Payment Date            ValueDate (DD/MM/YYYY)
-        //   6   Customer ID             CustomerReferenceNumber (EMP_ID)
-        //   7   Beneficiary Acc No      BeneficiaryAccountNumber
-        //   8   Beneficiary Name        BeneficiaryName
-        //   9   IFSC Code               IFSCCode
-        //  10   Beneficiary Bank Name   BeneficiaryBankName
-        //  11   Narration               Narration (e.g. "July Advance")
-        //  12   Beneficiary Email       BeneficiaryEmailId
-        //  13–28 (empty x16)            reserved / optional fields
+        //  Pos  Col  Value / Source
+        //  ---  ---  ----------------------------------------
+        //   1    B   N                          (Transaction Type — NEFT)
+        //   2    C   FREWA                      (Payment Product code)
+        //   3    D   BeneficiaryAccountNumber   (employee credit account)
+        //   4    E   TransactionAmount          (whole number)
+        //   5    F   BeneficiaryName            (employee name)
+        //   6    G   (empty)
+        //   7    H   (empty)
+        //   8    I   (empty)
+        //   9    J   (empty)
+        //  10    K   (empty)
+        //  11    L   (empty)
+        //  12    M   (empty)
+        //  13    N   (empty)
+        //  14    O   Narration                  (e.g. "Advance September")
+        //  15    P   (empty)
+        //  16    Q   (empty)
+        //  17    R   (empty)
+        //  18    S   (empty)
+        //  19    T   (empty)
+        //  20    U   (empty)
+        //  21    V   (empty)
+        //  22    W   (empty)
+        //  23    X   ValueDate (DD/MM/YYYY)     (Chq/Txn Date — MANDATORY)
+        //  24    Y   (empty)
+        //  25    Z   IFSCCode                   (employee IFSC code)
+        //  26   AA   (empty)
+        //  27   AB   (empty)
+        //  28   AC   BeneficiaryEmailId
         // -----------------------------------------------------------------------
 
         /// <summary>
@@ -248,7 +269,7 @@ namespace OBMS.WebAPI.BusinessObjects
         }
 
         /// <summary>
-        /// Formats amount as a whole number (no decimals) as seen in the portal sample.
+        /// Formats amount as a whole number (no decimals).
         /// e.g. 10000.00 → "10000"
         /// </summary>
         private static string FormatTxtAmount(string amount)
@@ -259,10 +280,9 @@ namespace OBMS.WebAPI.BusinessObjects
         }
 
         /// <summary>
-        /// Generates the Indian Bank Net Banking portal upload text file for Advance payments.
+        /// Generates the Indian Bank portal upload text file for Advance payments.
         /// 28 comma-separated fields per record, no header row, CRLF, UTF-8 no BOM.
-        ///   1=N, 2=ADV, 3=DebitAcc, 4=Amount, 5=ChqDate(DD/MM/YYYY),
-        ///   6=BenefAccNo, 7=BenefName, 8=IFSC, 9=BankName, 10=Narration, 11=Email, 12-28=empty
+        /// Same format as Salary export — columns B to AC.
         /// </summary>
         public static string GenerateTxtExport(List<RbiBankAdvanceExport> exportData)
         {
@@ -272,31 +292,32 @@ namespace OBMS.WebAPI.BusinessObjects
             {
                 string[] fields =
                 {
-                    // 1  — Transaction Type: N=NEFT, max 1 char
+                    // 1  (B) — Transaction Type
                     EscapeField(item.FieldType),
-                    // 2  — Payment Product: ADV = Advance, max 3 chars
-                    "ADV",
-                    // 3  — Debit Account (company's bank account)
-                    EscapeField(item.PayerAccountNo),
-                    // 4  — Debit Amount (whole number)
-                    EscapeField(FormatTxtAmount(item.TransactionAmount)),
-                    // 5  — Chq/Txn Date (DD/MM/YYYY) — MANDATORY
-                    EscapeField(item.ValueDate),
-                    // 6  — Beneficiary Account Number
+                    // 2  (C) — Payment Product code
+                    "FREWA",
+                    // 3  (D) — Credit Account (employee's bank account)
                     EscapeField(item.BeneficiaryAccountNumber),
-                    // 7  — Beneficiary Name
+                    // 4  (E) — Amount (whole number)
+                    EscapeField(FormatTxtAmount(item.TransactionAmount)),
+                    // 5  (F) — Beneficiary Name (employee name)
                     EscapeField(item.BeneficiaryName),
-                    // 8  — IFSC Code (uppercase, 11 chars)
-                    EscapeField(item.IFSCCode.ToUpper()),
-                    // 9  — Beneficiary Bank Name
-                    EscapeField(item.BeneficiaryBankName),
-                    // 10 — Narration (e.g. "September Advance")
-                    EscapeField(item.Narration),
-                    // 11 — Beneficiary Email
-                    EscapeField(item.BeneficiaryEmailId),
-                    // 12–28 — 17 reserved/optional empty fields
+                    // 6–13 (G–N) — empty (8 fields)
                     "", "", "", "", "", "", "", "",
-                    "", "", "", "", "", "", "", "", ""
+                    // 14 (O) — Narration (e.g. "Advance September")
+                    EscapeField(item.Narration),
+                    // 15–22 (P–W) — empty (8 fields)
+                    "", "", "", "", "", "", "", "",
+                    // 23 (X) — Chq/Txn Date (DD/MM/YYYY) — MANDATORY
+                    EscapeField(item.ValueDate),
+                    // 24 (Y) — empty
+                    "",
+                    // 25 (Z) — IFSC Code (employee's bank IFSC)
+                    EscapeField(item.IFSCCode),
+                    // 26–27 (AA–AB) — empty
+                    "", "",
+                    // 28 (AC) — Beneficiary Email
+                    EscapeField(item.BeneficiaryEmailId)
                 };
 
                 txt.Append(string.Join(",", fields));

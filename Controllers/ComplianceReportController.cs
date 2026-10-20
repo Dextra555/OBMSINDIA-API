@@ -622,6 +622,10 @@ namespace OBMS.WebAPI.Controllers
 
                             ps_EPFDeductionAmount = (decimal?)ps.EPFDeductionAmount,
 
+                            ps_PF = (decimal?)ps.PF,
+
+                            ps_PFWage = (decimal?)ps.PFWage,
+
                             ps_SOCSODeductionAmount = (decimal?)ps.SOCSODeductionAmount,
 
                             ps_IncomeTaxDeduction = (decimal?)ps.IncomeTaxDeduction,
@@ -637,6 +641,9 @@ namespace OBMS.WebAPI.Controllers
                             ps_UniformIssueRecovery = (decimal?)ps.UniformIssueRecovery,
 
                             ps_LoanRecovery = (decimal?)ps.LoanRecovery,
+
+                            // TDS from PaySlip (stored during salary processing)
+                            ps_TDS = (decimal?)ps.TDS,
 
                             // Attendance data (fallback for OT/Bonus if PS missing)
 
@@ -820,17 +827,15 @@ namespace OBMS.WebAPI.Controllers
 
 
 
-                // Calculate PF using statutory ceiling logic (12% of Basic+DA, capped at ₹15,000 = ₹1,800 max)
+                // Use PaySlip stored PF value (already calculated during salary processing)
 
-                // FIX: First pro-rate basic+da based on actual days worked, then calculate PF on the pro-rated amount
+                // No recalculation needed - PaySlip.PF is the authoritative value
 
-                // Use employeeWorkingDays (AttendanceAllowanceWorkingDays) for pro-rating
+                pf = d.ps_PF ?? 0;
 
-                decimal actualBasicDA = daysWorked > 0 ? Math.Round(((basic + da) / employeeWorkingDays) * daysWorked, 0) : 0;
-
-                pfResult = CalculatePF(actualBasicDA, 0, periodEnd);
-
-                pf = pfResult.EmployeeContribution;
+                // Read TDS directly from PaySlip (stored during salary processing)
+                // 0 when TDSApplicable = false, calculated value when true
+                decimal tds = d.ps_TDS ?? 0;
 
 
 
@@ -908,13 +913,21 @@ namespace OBMS.WebAPI.Controllers
 
 
 
-                decimal totalDed = Math.Round(pf + esi + pt + advances + otherDed + lwf, 0);
+                decimal totalDed = Math.Round(pf + esi + pt + tds + advances + otherDed + lwf, 0);
 
                 decimal net = Math.Round(gross - totalDed, 0);
 
 
 
-                var (employerEPS, employerEPF, totalER) = CalculateEmployerPF(pfResult);
+                // Calculate employer EPS (8.33%) and EPF (3.67%) from PaySlip stored PFWage
+
+                decimal storedPFWage = d.ps_PFWage ?? 0;
+
+                decimal employerEPS = Math.Round(storedPFWage * 0.0833m, 2);
+
+                decimal employerEPF = Math.Round(storedPFWage * 0.0367m, 2);
+
+                decimal totalER = employerEPS + employerEPF;
 
 
 
@@ -1034,6 +1047,9 @@ namespace OBMS.WebAPI.Controllers
 
                     arrear = Math.Round(otherDed, 0),
 
+                    tds = Math.Round(tds, 2),
+                    tdsApplicable = tds > 0,
+
                     totalDeductions = Math.Round(totalDed, 0),
 
                     net = Math.Round(net, 0),
@@ -1050,11 +1066,11 @@ namespace OBMS.WebAPI.Controllers
 
                     employerEPF = Math.Round(employerEPF, 0),
 
-                    // EPF/EPS wages
+                    // EPF/EPS wages - from PaySlip stored PFWage
 
-                    epfWages = pfResult.EligibleWages,
+                    epfWages = d.ps_PFWage ?? 0,
 
-                    epsWages = pfResult.EligibleWages,
+                    epsWages = d.ps_PFWage ?? 0,
 
                     employeeEPFShare = Math.Round(pf, 0),
 
@@ -1918,15 +1934,28 @@ namespace OBMS.WebAPI.Controllers
 
                 var rows = await GetPayrollRows(branch, client, periodStart, periodEnd);
 
-                // PF Statement: show ALL employees for the month (no PF Account filter)
-
-
+                // Filter: exclude employees where PF Deduction = No (EPFDETECT = false)
+                var pfEmpCodes = rows.Select(r => r.empId as string ?? r.empId?.ToString() ?? "").Where(c => !string.IsNullOrEmpty(c)).Distinct().ToList();
+                HashSet<string> pfEligibleCodes;
+                if (pfEmpCodes.Count > 0)
+                {
+                    pfEligibleCodes = (await _context.EmployeeSalaryDetails
+                        .Where(sd => pfEmpCodes.Contains(sd.EMPFL_CODE) && sd.EPFDETECT == true)
+                        .Select(sd => sd.EMPFL_CODE)
+                        .ToListAsync()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                }
+                else
+                {
+                    pfEligibleCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                }
+                rows = rows.Where(r => {
+                    var code = r.empId as string ?? r.empId?.ToString() ?? "";
+                    return pfEligibleCodes.Contains(code);
+                }).ToList();
 
                 var pfRows = rows.Select((r, idx) =>
 
                 {
-
-                    int age = (int)(r.age ?? 0);
 
                     decimal epfWages = (decimal)r.epfWages;
 
@@ -1978,7 +2007,7 @@ namespace OBMS.WebAPI.Controllers
 
                         numberOfDays = numberOfDays,
 
-                        age = age
+                        age = (int)(r.age ?? 0)
 
                     };
 
@@ -2047,19 +2076,35 @@ namespace OBMS.WebAPI.Controllers
                 var (year, month, periodStart, periodEnd) = ParsePeriod(period);
                 var rows = await GetPayrollRows(branch, client, periodStart, periodEnd);
 
+                // Filter: exclude employees where PF Deduction = No (EPFDETECT = false)
+                var pfEmpCodesTxt = rows.Select(r => r.empId as string ?? r.empId?.ToString() ?? "").Where(c => !string.IsNullOrEmpty(c)).Distinct().ToList();
+                HashSet<string> pfEligibleCodesTxt;
+                if (pfEmpCodesTxt.Count > 0)
+                {
+                    pfEligibleCodesTxt = (await _context.EmployeeSalaryDetails
+                        .Where(sd => pfEmpCodesTxt.Contains(sd.EMPFL_CODE) && sd.EPFDETECT == true)
+                        .Select(sd => sd.EMPFL_CODE)
+                        .ToListAsync()).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                }
+                else
+                {
+                    pfEligibleCodesTxt = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                }
+                rows = rows.Where(r => {
+                    var code = r.empId as string ?? r.empId?.ToString() ?? "";
+                    return pfEligibleCodesTxt.Contains(code);
+                }).ToList();
+
                 var sb = new System.Text.StringBuilder();
                 foreach (var (r, idx) in rows.Select((r, i) => (r, i)))
                 {
-                    int age = (int)(r.age ?? 0);
-                    bool isAbove55 = age >= 55;
-
                     decimal grossWages              = (decimal)r.gross;
-                    decimal epfWages                = isAbove55 ? 0 : (decimal)r.epfWages;
-                    decimal epsWages                = isAbove55 ? 0 : (decimal)r.epsWages;
-                    decimal edliWages               = isAbove55 ? 0 : epfWages;
-                    decimal epfContributionRemitted = isAbove55 ? 0 : (decimal)r.employeeEPFShare;
-                    decimal epsContributionRemitted = isAbove55 ? 0 : (decimal)r.employerEPS;
-                    decimal epfDifference           = isAbove55 ? 0 : (decimal)r.employerEPF;
+                    decimal epfWages                = (decimal)r.epfWages;
+                    decimal epsWages                = (decimal)r.epsWages;
+                    decimal edliWages               = epfWages;
+                    decimal epfContributionRemitted = (decimal)r.employeeEPFShare;
+                    decimal epsContributionRemitted = (decimal)r.employerEPS;
+                    decimal epfDifference           = (decimal)r.employerEPF;
                     decimal ncpDays                 = 0;
                     decimal refundOfAdvances        = 0;
 
@@ -2992,6 +3037,141 @@ namespace OBMS.WebAPI.Controllers
             {
                 _logger.LogError(ex, "Error generating GST statement");
                 return StatusCode(500, new { message = "Error generating GST statement", error = ex.Message });
+            }
+        }
+
+        // ─── OUT: Supplier GST Paid ───────────────────────────────────────────────────
+        [HttpPost("GetOutGSTReport")]
+        public async Task<IActionResult> GetOutGSTReport([FromBody] System.Text.Json.JsonElement body)
+        {
+            try
+            {
+                string fromDate = "", toDate = "", branch = "";
+                if (body.TryGetProperty("Parameters", out var prms))
+                {
+                    if (prms.TryGetProperty("fromDate", out var fd)) fromDate = fd.GetString() ?? "";
+                    if (prms.TryGetProperty("toDate",   out var td)) toDate   = td.GetString() ?? "";
+                    if (prms.TryGetProperty("branch",   out var br)) branch   = br.GetString() ?? "";
+                }
+
+                if (!DateTime.TryParse(fromDate, out var dtFrom))
+                    dtFrom = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+                if (!DateTime.TryParse(toDate, out var dtTo))
+                    dtTo = DateTime.Now;
+                dtTo = dtTo.Date.AddDays(1).AddSeconds(-1);
+
+                var query = _context.Set<CreditorInvoice>()
+                    .Where(ci => !ci.IsDeleted
+                              && ci.InvoiceDate >= dtFrom
+                              && ci.InvoiceDate <= dtTo
+                              && ci.GSTAmount > 0);
+
+                if (!string.IsNullOrEmpty(branch))
+                    query = query.Where(ci => ci.Branch == branch);
+
+                var invoices = await query
+                    .OrderBy(ci => ci.InvoiceDate)
+                    .ThenBy(ci => ci.InvoiceNo)
+                    .ToListAsync();
+
+                // Load supplier names in one round-trip
+                var supplierIds = invoices.Select(ci => ci.Supplier).Distinct().ToList();
+                var suppliers   = await _context.Set<Supplier>()
+                    .Where(s => supplierIds.Contains(s.Id))
+                    .ToDictionaryAsync(s => s.Id, s => s.Name);
+
+                var rows = invoices.Select((ci, idx) => new
+                {
+                    sno          = idx + 1,
+                    invoiceDate  = ci.InvoiceDate.ToString("dd-MM-yyyy"),
+                    invoiceNo    = ci.InvoiceNo,
+                    branch       = ci.Branch,
+                    supplierName = suppliers.TryGetValue(ci.Supplier, out var nm) ? nm : ci.Supplier.ToString(),
+                    invoiceTotal = Math.Round(ci.Total, 2),
+                    gstPercentage = Math.Round(ci.GSTPercentage, 2),
+                    gstAmount    = Math.Round(ci.GSTAmount, 2)
+                }).ToList();
+
+                var totals = new
+                {
+                    FromDate          = dtFrom.ToString("dd-MM-yyyy"),
+                    ToDate            = dtTo.ToString("dd-MM-yyyy"),
+                    TotalInvoices     = rows.Count,
+                    GrandInvoiceTotal = Math.Round(rows.Sum(r => r.invoiceTotal), 2),
+                    GrandGST          = Math.Round(rows.Sum(r => r.gstAmount), 2)
+                };
+
+                return Ok(new { rows, totals });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating OUT GST report");
+                return StatusCode(500, new { message = "Error generating OUT GST report", error = ex.Message });
+            }
+        }
+
+        // ─── PAYROLL: Professional Tax ────────────────────────────────────────────────
+        [HttpPost("GetPayrollGSTReport")]
+        public async Task<IActionResult> GetPayrollGSTReport([FromBody] System.Text.Json.JsonElement body)
+        {
+            try
+            {
+                string fromDate = "", toDate = "", branch = "";
+                if (body.TryGetProperty("Parameters", out var prms))
+                {
+                    if (prms.TryGetProperty("fromDate", out var fd)) fromDate = fd.GetString() ?? "";
+                    if (prms.TryGetProperty("toDate",   out var td)) toDate   = td.GetString() ?? "";
+                    if (prms.TryGetProperty("branch",   out var br)) branch   = br.GetString() ?? "";
+                }
+
+                if (!DateTime.TryParse(fromDate, out var dtFrom))
+                    dtFrom = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+                if (!DateTime.TryParse(toDate, out var dtTo))
+                    dtTo = DateTime.Now;
+
+                var query =
+                    from ps  in _context.PaySlips
+                    join emp in _context.Employees on ps.EmployeeID equals emp.EMP_ID
+                    where ps.Period >= dtFrom
+                       && ps.Period <= dtTo.Date.AddDays(1).AddSeconds(-1)
+                       && ps.PTax > 0
+                    select new { ps, emp };
+
+                if (!string.IsNullOrEmpty(branch))
+                    query = query.Where(x => x.emp.EMP_BRANCH_CODE == branch);
+
+                var data = await query
+                    .OrderBy(x => x.ps.Period)
+                    .ThenBy(x => x.emp.EMP_BRANCH_CODE)
+                    .ThenBy(x => x.emp.EMP_CODE)
+                    .ToListAsync();
+
+                var rows = data.Select((x, idx) => new
+                {
+                    sno      = idx + 1,
+                    period   = x.ps.Period.ToString("MMM-yyyy"),
+                    empCode  = x.emp.EMP_CODE,
+                    empName  = x.emp.EMP_NAME,
+                    branch   = x.emp.EMP_BRANCH_CODE,
+                    grossPay = Math.Round(x.ps.GrossPay, 2),
+                    ptax     = Math.Round(x.ps.PTax, 2)
+                }).ToList();
+
+                var totals = new
+                {
+                    FromDate         = dtFrom.ToString("dd-MM-yyyy"),
+                    ToDate           = dtTo.ToString("dd-MM-yyyy"),
+                    TotalEmployees   = rows.Count,
+                    GrandGrossPay    = Math.Round(rows.Sum(r => r.grossPay), 2),
+                    GrandPTax        = Math.Round(rows.Sum(r => r.ptax), 2)
+                };
+
+                return Ok(new { rows, totals });
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error generating Payroll GST (PTax) report");
+                return StatusCode(500, new { message = "Error generating Payroll PTax report", error = ex.Message });
             }
         }
 

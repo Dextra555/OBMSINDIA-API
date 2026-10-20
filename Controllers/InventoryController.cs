@@ -665,6 +665,12 @@ namespace OBMS.WebAPI.Controllers
                 creditorInvoice.ItemCategory = creditorInvoiceRequestDto.ItemCategory;
                 creditorInvoice.IsDeleted = false;
 
+                // GST / TDS (header level — % stored; amount auto-calculated then saved)
+                creditorInvoice.GSTPercentage = creditorInvoiceRequestDto.GSTPercentage;
+                creditorInvoice.GSTAmount     = creditorInvoiceRequestDto.GSTAmount;
+                creditorInvoice.TDSPercentage = creditorInvoiceRequestDto.TDSPercentage;
+                creditorInvoice.TDSAmount     = creditorInvoiceRequestDto.TDSAmount;
+
 
                 await _inventoryRepository.SaveAndUpdateUtility(creditorInvoice);
 

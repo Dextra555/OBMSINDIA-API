@@ -3946,7 +3946,13 @@ if (agreement != null && agreement.IsValid == true)
 
                             ISNULL(P.PaidAmount,0) AS PaidAmount,
 
-                            ISNULL(BPD.Amount,0) AS Amount
+                            ISNULL(BPD.Amount,0) AS Amount,
+
+                            ISNULL(CI.GSTAmount,0) AS GSTAmount,
+
+                            ISNULL(CI.TDSAmount,0) AS TDSAmount,
+
+                            (CI.Total + ISNULL(CI.GSTAmount,0) - ISNULL(CI.TDSAmount,0)) AS NetPayable
 
                         FROM CreditorInvoice CI
 
@@ -3996,7 +4002,7 @@ if (agreement != null && agreement.IsValid == true)
 
                                 @PaymentID <> 0
 
-                                OR CI.Total - ISNULL(P.PaidAmount,0) > 0
+                                OR (CI.Total + ISNULL(CI.GSTAmount,0) - ISNULL(CI.TDSAmount,0)) - ISNULL(P.PaidAmount,0) > 0
 
                               )
 
@@ -4068,7 +4074,13 @@ if (agreement != null && agreement.IsValid == true)
 
                         ISNULL(BPD.Amount,0) AS Amount,
 
-                        ISNULL(P.PaidAmount,0) AS PaidAmount
+                        ISNULL(P.PaidAmount,0) AS PaidAmount,
+
+                        ISNULL(CI.GSTAmount,0) AS GSTAmount,
+
+                        ISNULL(CI.TDSAmount,0) AS TDSAmount,
+
+                        (CI.Total + ISNULL(CI.GSTAmount,0) - ISNULL(CI.TDSAmount,0)) AS NetPayable
 
                     FROM CreditorInvoice CI
 
@@ -4112,7 +4124,7 @@ if (agreement != null && agreement.IsValid == true)
 
                             @PaymentID <> 0               
 
-                            OR CI.Total - ISNULL(P.PaidAmount,0) > 0 
+                            OR (CI.Total + ISNULL(CI.GSTAmount,0) - ISNULL(CI.TDSAmount,0)) - ISNULL(P.PaidAmount,0) > 0 
 
                           )
 
@@ -6420,6 +6432,83 @@ if (agreement != null && agreement.IsValid == true)
             }
 
         }
+
+        // ─── OUT: supplier/expense TDS ────────────────────────────────────────────
+        [HttpGet]
+        [Route("GetOutTDSReport")]
+        public async Task<IActionResult> GetOutTDSReport(string startDate, string endDate, string branch = "")
+        {
+            try
+            {
+                var branchFilter = string.IsNullOrWhiteSpace(branch)
+                    ? ""
+                    : $" AND ci.Branch = '{branch}'";
+
+                var query = $@"
+                    SELECT
+                        ci.ID,
+                        ci.InvoiceDate,
+                        ci.InvoiceNo,
+                        ci.Branch,
+                        ISNULL(s.Name, '') AS SupplierName,
+                        ISNULL(ci.Total, 0) AS Total,
+                        ISNULL(ci.TDSPercentage, 0) AS TDSPercentage,
+                        ISNULL(ci.TDSAmount, 0) AS TDSAmount
+                    FROM CreditorInvoice ci
+                    LEFT JOIN Suppliers s ON s.Id = ci.Supplier
+                    WHERE ci.IsDeleted = 0
+                      AND CAST(ci.InvoiceDate AS DATE) >= '{startDate}'
+                      AND CAST(ci.InvoiceDate AS DATE) <= '{endDate}'
+                      AND ISNULL(ci.TDSAmount, 0) > 0
+                      {branchFilter}
+                    ORDER BY ci.InvoiceDate ASC, ci.Branch ASC";
+
+                var result = await _oBMSDbContext.OutTDSReportResults.FromSqlRaw(query).ToListAsync();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
+        // ─── PAYROLL: employee salary TDS ─────────────────────────────────────────
+        [HttpGet]
+        [Route("GetPayrollTDSReport")]
+        public async Task<IActionResult> GetPayrollTDSReport(string startDate, string endDate, string branch = "")
+        {
+            try
+            {
+                var branchFilter = string.IsNullOrWhiteSpace(branch)
+                    ? ""
+                    : $" AND e.EMP_BRANCH_CODE = '{branch}'";
+
+                var query = $@"
+                    SELECT
+                        ps.ID,
+                        ps.Period,
+                        e.EMP_CODE   AS EmpCode,
+                        e.EMP_NAME   AS EmpName,
+                        e.EMP_BRANCH_CODE AS Branch,
+                        ISNULL(ps.GrossPay, 0) AS GrossPay,
+                        ISNULL(ps.TDS, 0) AS TDS
+                    FROM PaySlip ps
+                    INNER JOIN Employee e ON e.EMP_ID = ps.EmployeeID
+                    WHERE CAST(ps.Period AS DATE) >= '{startDate}'
+                      AND CAST(ps.Period AS DATE) <= '{endDate}'
+                      AND ISNULL(ps.TDS, 0) > 0
+                      {branchFilter}
+                    ORDER BY ps.Period ASC, e.EMP_BRANCH_CODE ASC, e.EMP_CODE ASC";
+
+                var result = await _oBMSDbContext.PayrollTDSReportResults.FromSqlRaw(query).ToListAsync();
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, ex.Message);
+            }
+        }
+
     }
 
 
@@ -6666,6 +6755,33 @@ public class TDSReportResult
 
     public string? Particulars { get; set; }
 
+}
+
+// ─── OUT mode: supplier/expense TDS ─────────────────────────────────────────
+[Keyless]
+public class OutTDSReportResult
+{
+    public int ID { get; set; }
+    public DateTime? InvoiceDate { get; set; }
+    public string? InvoiceNo { get; set; }
+    public string? Branch { get; set; }
+    public string? SupplierName { get; set; }
+    public decimal Total { get; set; }
+    public decimal TDSPercentage { get; set; }
+    public decimal TDSAmount { get; set; }
+}
+
+// ─── PAYROLL mode: employee salary TDS ──────────────────────────────────────
+[Keyless]
+public class PayrollTDSReportResult
+{
+    public int ID { get; set; }
+    public DateTime? Period { get; set; }
+    public string? EmpCode { get; set; }
+    public string? EmpName { get; set; }
+    public string? Branch { get; set; }
+    public decimal GrossPay { get; set; }
+    public decimal TDS { get; set; }
 }
 
 }

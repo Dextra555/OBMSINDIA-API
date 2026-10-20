@@ -93,6 +93,8 @@ public partial class OBMSDbContext : DbContext
     public DbSet<TDSSlabConfiguration> TDSSlabConfigurations { get; set; }
     public DbSet<ServiceType> ServiceTypes { get; set; }
     public DbSet<TDSReportResult> TDSReportResults { get; set; }
+    public DbSet<OutTDSReportResult> OutTDSReportResults { get; set; }
+    public DbSet<PayrollTDSReportResult> PayrollTDSReportResults { get; set; }
     public DbSet<BranchPaymentsDto> BranchPaymentsDtos { get; set; }
     public DbSet<ClientAttendancePeriod> ClientAttendancePeriods { get; set; }
     public DbSet<EmployeeLeaveBalance> EmployeeLeaveBalances { get; set; }
@@ -128,6 +130,8 @@ public partial class OBMSDbContext : DbContext
         modelBuilder.Entity<ChequeStatus>().Property(c => c.Status).HasColumnName("ChequeStatus");
         modelBuilder.Entity<InvoiceDetailRow>().HasNoKey().ToView(null);
         modelBuilder.Entity<TDSReportResult>().HasNoKey().ToView(null);
+        modelBuilder.Entity<OutTDSReportResult>().HasNoKey().ToView(null);
+        modelBuilder.Entity<PayrollTDSReportResult>().HasNoKey().ToView(null);
 
         // Configure Employee CB (Commercial Breakdown) columns - Simplified
         modelBuilder.Entity<Employee>().Property(e => e.CB_Basic).HasColumnName("CB_Basic");

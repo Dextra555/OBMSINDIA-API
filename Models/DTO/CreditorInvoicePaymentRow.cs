@@ -11,5 +11,12 @@ namespace OBMS.WebAPI.Models.DTO
         public decimal Total { get; set; }
         public decimal PaidAmount { get; set; }
         public decimal? Amount { get; set; }
+
+        // GST / TDS from CreditorInvoice — used to compute Net Payable
+        public decimal GSTAmount { get; set; }
+        public decimal TDSAmount { get; set; }
+
+        /// <summary>Net Payable = Total + GSTAmount - TDSAmount</summary>
+        public decimal NetPayable { get; set; }
     }
 }

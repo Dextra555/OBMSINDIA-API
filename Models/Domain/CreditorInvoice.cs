@@ -20,6 +20,14 @@ namespace OBMS.WebAPI.Models.Domain
         public string LastUpdatedBy { get; set; }
         public int? ItemCategory { get; set; }
         public bool IsDeleted { get; set; }
+
+        // GST fields (header level — % entered, amount auto-calculated but editable)
+        public decimal GSTPercentage { get; set; } = 0;
+        public decimal GSTAmount { get; set; } = 0;
+
+        // TDS fields (header level — % entered, amount auto-calculated but editable)
+        public decimal TDSPercentage { get; set; } = 0;
+        public decimal TDSAmount { get; set; } = 0;
     }
 
 }
