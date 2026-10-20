@@ -1637,8 +1637,8 @@ var sqlQuery = @"
                 invoiceNoOriginal = invoice.InvoiceNo ?? "001",
                 invoiceDateOriginal = invoice.InvoiceDate,
                 invoiceDate = invoice.InvoiceDate.ToString("dd/MM/yyyy"),
-                servicePeriod = !string.IsNullOrWhiteSpace(agreement?.Period)
-                    ? agreement.Period
+                servicePeriod = !string.IsNullOrWhiteSpace(agreement?.Period) && DateTime.TryParse(agreement.Period, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsedPeriod)
+                    ? TimeZoneInfo.ConvertTimeFromUtc(parsedPeriod.Kind == DateTimeKind.Utc ? parsedPeriod : DateTime.SpecifyKind(parsedPeriod, DateTimeKind.Utc), TimeZoneInfo.FindSystemTimeZoneById("India Standard Time")).ToString("dd/MM/yyyy")
                     : invoice.InvoiceDate.ToString("MMMM yyyy"),
                 workOrderNoFormatted = GetWorkOrderNo(client?.Code ?? ""),
                 workOrderNoOriginal = GetWorkOrderNo(client?.Code ?? ""),

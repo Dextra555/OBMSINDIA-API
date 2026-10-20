@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 using OBMS.WebAPI.Controllers;
 using OBMS.WebAPI.Models.Domain;
 using OBMS.WebAPI.Models.DTO;
