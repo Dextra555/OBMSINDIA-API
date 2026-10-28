@@ -665,9 +665,28 @@ namespace OBMS.WebAPI.Controllers
                 creditorInvoice.ItemCategory = creditorInvoiceRequestDto.ItemCategory;
                 creditorInvoice.IsDeleted = false;
 
-                // GST / TDS (header level — % stored; amount auto-calculated then saved)
-                creditorInvoice.GSTPercentage = creditorInvoiceRequestDto.GSTPercentage;
-                creditorInvoice.GSTAmount     = creditorInvoiceRequestDto.GSTAmount;
+                // Transaction type + CGST/SGST/IGST fields
+                creditorInvoice.TransactionType = creditorInvoiceRequestDto.TransactionType ?? "I";
+                creditorInvoice.CGSTPercentage  = creditorInvoiceRequestDto.CGSTPercentage;
+                creditorInvoice.CGSTAmount      = creditorInvoiceRequestDto.CGSTAmount;
+                creditorInvoice.SGSTPercentage  = creditorInvoiceRequestDto.SGSTPercentage;
+                creditorInvoice.SGSTAmount      = creditorInvoiceRequestDto.SGSTAmount;
+                creditorInvoice.IGSTPercentage  = creditorInvoiceRequestDto.IGSTPercentage;
+                creditorInvoice.IGSTAmount      = creditorInvoiceRequestDto.IGSTAmount;
+
+                // Keep legacy GSTAmount in sync so Finance payments still works
+                if (creditorInvoice.TransactionType == "E")
+                {
+                    creditorInvoice.GSTPercentage = creditorInvoiceRequestDto.IGSTPercentage;
+                    creditorInvoice.GSTAmount     = creditorInvoiceRequestDto.IGSTAmount;
+                }
+                else
+                {
+                    creditorInvoice.GSTPercentage = creditorInvoiceRequestDto.CGSTPercentage + creditorInvoiceRequestDto.SGSTPercentage;
+                    creditorInvoice.GSTAmount     = creditorInvoiceRequestDto.CGSTAmount + creditorInvoiceRequestDto.SGSTAmount;
+                }
+
+                // TDS fields
                 creditorInvoice.TDSPercentage = creditorInvoiceRequestDto.TDSPercentage;
                 creditorInvoice.TDSAmount     = creditorInvoiceRequestDto.TDSAmount;
 

@@ -636,6 +636,10 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                 existingClientDetails.BillingPINCode = string.IsNullOrWhiteSpace(clientMaster.BillingPINCode) ? null : clientMaster.BillingPINCode.Trim();
 
+                existingClientDetails.TDSApplicable = clientMaster.TDSApplicable;
+
+                existingClientDetails.TDSPercentage = clientMaster.TDSApplicable ? clientMaster.TDSPercentage : 0;
+
                 
 
                 // Update simplified compliance field
@@ -1787,4 +1791,3 @@ namespace OBMS.WebAPI.Repositories.Implementation
     }
 
 }
-

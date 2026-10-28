@@ -98,7 +98,10 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
             results.Add("banks", banks);
 
-            var category = await _oBMSDbContext.InventoryCategories.Where(s => s.Cat == "U").OrderBy(c => c.Name).ToListAsync();
+            var category = await _oBMSDbContext.InventoryCategories
+                .Where(s => s.Cat == "P" || s.Cat == "U" || s.Cat == "O")
+                .OrderBy(c => c.Name)
+                .ToListAsync();
             results.Add("categories", category);
 
             var obj2 = await _oBMSDbContext.BranchPaymentForBranchs.Where(x => x.BName == "superuser").OrderBy(x => x.Name).ToListAsync();
@@ -374,6 +377,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
                                      PaidAmount = d.Amount,
                                      InvoiceNo = c.InvoiceNo,
                                      InvoiceAmount = c.ServiceCharges - c.Discount + c.TaxAmount,
+                                     TaxAmount = c.TaxAmount,
                                      InvoiceDate = c.InvoiceDate
                                  }).ToArrayAsync();
 

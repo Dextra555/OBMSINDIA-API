@@ -478,7 +478,33 @@ namespace OBMS.WebAPI.Controllers
 
                          select att.EmployeeID).Distinct().ToListAsync();
 
+            // Also include employees directly assigned to this client via EMP_CLIENT field (even without attendance records)
 
+            var employeesDirectlyAssignedToClient = string.IsNullOrEmpty(client)
+
+                ? null
+
+                : await _context.Employees
+
+                    .Where(e => e.EMP_CLIENT == client && (string.IsNullOrEmpty(branch) || e.EMP_BRANCH_CODE == branch))
+
+                    .Select(e => e.EMP_ID)
+
+                    .ToListAsync();
+
+            // Merge both lists: attendance-based + directly assigned
+
+            var allClientEmployeeIds = string.IsNullOrEmpty(client)
+
+                ? null
+
+                : (employeesWithClientAttendance ?? new List<int>())
+
+                    .Union(employeesDirectlyAssignedToClient ?? new List<int>())
+
+                    .Distinct()
+
+                    .ToList();
 
             // FIX: Aggregate SalaryAdvances per employee to prevent duplicate rows when employee has multiple advances (daily + monthly)
 
@@ -520,7 +546,7 @@ namespace OBMS.WebAPI.Controllers
 
                         where (string.IsNullOrEmpty(branch) || emp.EMP_BRANCH_CODE == branch)
 
-                             && (string.IsNullOrEmpty(client) || (employeesWithClientAttendance != null && employeesWithClientAttendance.Contains(emp.EMP_ID)))
+                             && (string.IsNullOrEmpty(client) || (allClientEmployeeIds != null && allClientEmployeeIds.Contains(emp.EMP_ID)))
 
                              && (att != null || ps != null) // Ensure there's at least some recording for the month
 
@@ -715,15 +741,33 @@ namespace OBMS.WebAPI.Controllers
 
                 int daysWorked = !string.IsNullOrEmpty(client) ? clientDaysWorked : totalMonthDays;
 
-
-
-                // CRITICAL FIX: Skip employees entirely if they had 0 attendance for the heavily requested filtering client.
+                // If client is specified and no attendance found for that client,
+                // but employee is directly assigned to this client (EMP_CLIENT match),
+                // use PaySlip BasicSalaryDays as fallback instead of skipping.
 
                 if (!string.IsNullOrEmpty(client) && daysWorked == 0)
 
                 {
 
-                    continue;
+                    bool isDirectlyAssigned = employeesDirectlyAssignedToClient != null && employeesDirectlyAssignedToClient.Contains(d.EMP_ID);
+
+                    if (isDirectlyAssigned && hasPaySlip)
+
+                    {
+
+                        // Use payslip days as fallback for directly assigned employees
+
+                        daysWorked = d.ps_BasicSalaryDays.HasValue ? (int)d.ps_BasicSalaryDays.Value : daysInMonth;
+
+                    }
+
+                    else
+
+                    {
+
+                        continue;
+
+                    }
 
                 }
 
@@ -1806,48 +1850,27 @@ namespace OBMS.WebAPI.Controllers
 
             var (year, month, periodStart, periodEnd) = ParsePeriod(period);
 
-
-
             // Employees with overtime indicators filtered by Client/Branch
-
             var overtimeRows = await (from emp in _context.Employees
-
                                       join empD in _context.EmploymentDetails on emp.EMP_CODE equals empD.EMPPAY_CODE
-
                                       join att in _context.Attendances on emp.EMP_ID equals att.EmployeeID
-
                                       join det in _context.AttendanceDetails on att.ID equals det.AttendanceID
-
                                       where att.Period >= periodStart && att.Period <= periodEnd
-
-                                           && (det.OTClient == client || (string.IsNullOrEmpty(client) && att.Shift2Rate > 0))
-
+                                           && (string.IsNullOrEmpty(client) || det.OTClient == client || emp.EMP_BRANCH_CODE == client)
                                            && (string.IsNullOrEmpty(branch) || emp.EMP_BRANCH_CODE == branch)
-
+                                           && (det.OTTimeStart != null || att.Shift2Rate > 0)
                                       select new
-
                                       {
-
                                           emp.EMP_NAME,
-
                                           EMP_CODE = emp.EMP_CODE,
-
                                           Designation = empD.EMPPAY_JOB_TITLE ?? emp.EMP_ROLE,
-
                                           att.AllowanceDeduction,
-
                                           att.Shift2Rate,
-
                                           att.Period,
-
                                           det.AttendanceDate,
-
                                           det.OTTimeStart,
-
                                           det.OTTimeEnd,
-
                                           det.OTClient
-
                                       }).ToListAsync();
 
 
@@ -3080,16 +3103,78 @@ namespace OBMS.WebAPI.Controllers
                     .Where(s => supplierIds.Contains(s.Id))
                     .ToDictionaryAsync(s => s.Id, s => s.Name);
 
-                var rows = invoices.Select((ci, idx) => new
+                var rows = invoices.Select((ci, idx) =>
                 {
-                    sno          = idx + 1,
-                    invoiceDate  = ci.InvoiceDate.ToString("dd-MM-yyyy"),
-                    invoiceNo    = ci.InvoiceNo,
-                    branch       = ci.Branch,
-                    supplierName = suppliers.TryGetValue(ci.Supplier, out var nm) ? nm : ci.Supplier.ToString(),
-                    invoiceTotal = Math.Round(ci.Total, 2),
-                    gstPercentage = Math.Round(ci.GSTPercentage, 2),
-                    gstAmount    = Math.Round(ci.GSTAmount, 2)
+                    // Determine intra/inter from TransactionType ('I' = intra, 'E' = inter)
+                    // Fall back: if new CGST/IGST columns are zero, derive from legacy GSTAmount
+                    var isIntra = (ci.TransactionType ?? "I") != "E";
+
+                    decimal cgstPct, cgstAmt, sgstPct, sgstAmt, igstPct, igstAmt;
+
+                    if (isIntra)
+                    {
+                        // Use stored CGST/SGST; fallback to 50/50 split of legacy GSTAmount
+                        if (ci.CGSTAmount > 0 || ci.SGSTAmount > 0)
+                        {
+                            cgstPct = ci.CGSTPercentage; cgstAmt = ci.CGSTAmount;
+                            sgstPct = ci.SGSTPercentage; sgstAmt = ci.SGSTAmount;
+                        }
+                        else
+                        {
+                            cgstPct = ci.GSTPercentage / 2; cgstAmt = ci.GSTAmount / 2;
+                            sgstPct = ci.GSTPercentage / 2; sgstAmt = ci.GSTAmount / 2;
+                        }
+                        igstPct = 0; igstAmt = 0;
+                    }
+                    else
+                    {
+                        // Use stored IGST; fallback to full legacy GSTAmount as IGST
+                        cgstPct = 0; cgstAmt = 0;
+                        sgstPct = 0; sgstAmt = 0;
+                        igstPct = ci.IGSTAmount > 0 ? ci.IGSTPercentage : ci.GSTPercentage;
+                        igstAmt = ci.IGSTAmount > 0 ? ci.IGSTAmount      : ci.GSTAmount;
+                    }
+
+                    // Compute combined GST rate % for display (same logic as IN mode)
+                    var totalGstPct  = Math.Round(ci.GSTPercentage, 2);
+                    string gstRateDisplay;
+                    if (isIntra)
+                    {
+                        var half = totalGstPct / 2;
+                        gstRateDisplay = half % 1 == 0
+                            ? $"{(int)half}% + {(int)half}%"
+                            : $"{half:F1}% + {half:F1}%";
+                    }
+                    else
+                    {
+                        gstRateDisplay = totalGstPct % 1 == 0
+                            ? $"{(int)totalGstPct}%"
+                            : $"{totalGstPct:F2}%";
+                    }
+
+                    return new
+                    {
+                        sno             = idx + 1,
+                        invoiceDate     = ci.InvoiceDate.ToString("dd-MM-yyyy"),
+                        invoiceNo       = ci.InvoiceNo,
+                        branch          = ci.Branch,
+                        supplierName    = suppliers.TryGetValue(ci.Supplier, out var nm) ? nm : ci.Supplier.ToString(),
+                        invoiceTotal    = Math.Round(ci.Total, 2),
+                        gstRate         = totalGstPct,
+                        gstRateDisplay  = gstRateDisplay,
+                        isIntraState    = isIntra,
+                        transactionType = isIntra ? "Intra-State" : "Inter-State",
+                        cgstPercentage  = Math.Round(cgstPct, 2),
+                        cgstAmount      = Math.Round(cgstAmt, 2),
+                        sgstPercentage  = Math.Round(sgstPct, 2),
+                        sgstAmount      = Math.Round(sgstAmt, 2),
+                        igstPercentage  = Math.Round(igstPct, 2),
+                        igstAmount      = Math.Round(igstAmt, 2),
+                        totalGST        = Math.Round(ci.GSTAmount, 2),
+                        tdsPercentage   = Math.Round(ci.TDSPercentage, 2),
+                        tdsAmount       = Math.Round(ci.TDSAmount, 2),
+                        netPayable      = Math.Round(ci.Total + ci.GSTAmount - ci.TDSAmount, 2)
+                    };
                 }).ToList();
 
                 var totals = new
@@ -3098,7 +3183,12 @@ namespace OBMS.WebAPI.Controllers
                     ToDate            = dtTo.ToString("dd-MM-yyyy"),
                     TotalInvoices     = rows.Count,
                     GrandInvoiceTotal = Math.Round(rows.Sum(r => r.invoiceTotal), 2),
-                    GrandGST          = Math.Round(rows.Sum(r => r.gstAmount), 2)
+                    GrandCGST         = Math.Round(rows.Sum(r => r.cgstAmount), 2),
+                    GrandSGST         = Math.Round(rows.Sum(r => r.sgstAmount), 2),
+                    GrandIGST         = Math.Round(rows.Sum(r => r.igstAmount), 2),
+                    GrandGST          = Math.Round(rows.Sum(r => r.totalGST), 2),
+                    GrandTDS          = Math.Round(rows.Sum(r => r.tdsAmount), 2),
+                    GrandNetPayable   = Math.Round(rows.Sum(r => r.netPayable), 2)
                 };
 
                 return Ok(new { rows, totals });

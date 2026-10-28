@@ -43,6 +43,8 @@ PRINT '--- STEP 1: Adding screens to ScreenList (Payroll) ---';
 PRINT '';
 
 -- 1a. Client Compliance Report
+DECLARE @ExistingCategory NVARCHAR(100);
+
 IF NOT EXISTS (SELECT 1 FROM ScreenList WHERE ScreenName = 'Client Compliance Report')
 BEGIN
     INSERT INTO ScreenList (ScreenName, Category, LastUpdate, LastUpdatedBy)
@@ -51,8 +53,8 @@ BEGIN
 END
 ELSE
 BEGIN
-    PRINT 'Screen already exists: Client Compliance Report -> '
-        + ISNULL((SELECT Category FROM ScreenList WHERE ScreenName = 'Client Compliance Report'), '(null)');
+    SELECT @ExistingCategory = Category FROM ScreenList WHERE ScreenName = 'Client Compliance Report';
+    PRINT 'Screen already exists: Client Compliance Report -> ' + ISNULL(@ExistingCategory, '(null)');
 END
 
 -- 1b. ESI Statement Report
@@ -64,8 +66,8 @@ BEGIN
 END
 ELSE
 BEGIN
-    PRINT 'Screen already exists: ESI Statement Report -> '
-        + ISNULL((SELECT Category FROM ScreenList WHERE ScreenName = 'ESI Statement Report'), '(null)');
+    SELECT @ExistingCategory = Category FROM ScreenList WHERE ScreenName = 'ESI Statement Report';
+    PRINT 'Screen already exists: ESI Statement Report -> ' + ISNULL(@ExistingCategory, '(null)');
 END
 
 PRINT '';

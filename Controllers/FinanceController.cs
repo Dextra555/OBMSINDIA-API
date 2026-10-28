@@ -1637,9 +1637,7 @@ var sqlQuery = @"
                 invoiceNoOriginal = invoice.InvoiceNo ?? "001",
                 invoiceDateOriginal = invoice.InvoiceDate,
                 invoiceDate = invoice.InvoiceDate.ToString("dd/MM/yyyy"),
-                servicePeriod = !string.IsNullOrWhiteSpace(agreement?.Period) && DateTime.TryParse(agreement.Period, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsedPeriod)
-                    ? TimeZoneInfo.ConvertTimeFromUtc(parsedPeriod.Kind == DateTimeKind.Utc ? parsedPeriod : DateTime.SpecifyKind(parsedPeriod, DateTimeKind.Utc), TimeZoneInfo.FindSystemTimeZoneById("India Standard Time")).ToString("dd/MM/yyyy")
-                    : invoice.InvoiceDate.ToString("MMMM yyyy"),
+                servicePeriod = BuildServicePeriod(agreement?.Period, agreement?.ToPeriod, invoice.InvoiceDate),
                 workOrderNoFormatted = GetWorkOrderNo(client?.Code ?? ""),
                 workOrderNoOriginal = GetWorkOrderNo(client?.Code ?? ""),
                 workOrderDate = GetWorkOrderDate(client?.Code ?? ""),
@@ -2527,6 +2525,28 @@ var sqlQuery = @"
         private string GetWorkOrderNo(string clientCode)
         {
             return _clientWorkOrders.TryGetValue(clientCode, out var info) ? info.workOrderNo : "";
+        }
+
+        private static string BuildServicePeriod(string? fromPeriod, string? toPeriod, DateTime invoiceDate)
+        {
+            static string? ParsePeriodDate(string? raw, string format)
+            {
+                if (string.IsNullOrWhiteSpace(raw)) return null;
+                if (!DateTime.TryParse(raw, null, System.Globalization.DateTimeStyles.RoundtripKind, out var dt))
+                    return null;
+                var ist = TimeZoneInfo.FindSystemTimeZoneById("India Standard Time");
+                var localDt = TimeZoneInfo.ConvertTimeFromUtc(
+                    dt.Kind == DateTimeKind.Utc ? dt : DateTime.SpecifyKind(dt, DateTimeKind.Utc), ist);
+                return localDt.ToString(format);
+            }
+
+            var from = ParsePeriodDate(fromPeriod, "dd/MM/yyyy");
+            var to   = ParsePeriodDate(toPeriod,   "dd/MM/yyyy");
+
+            if (from != null && to != null)   return $"{from} to {to}";
+            if (from != null)                 return from;
+            if (to != null)                   return to;
+            return invoiceDate.ToString("MMMM yyyy");
         }
 
         private string GetWorkOrderDate(string clientCode)
@@ -3793,7 +3813,10 @@ if (agreement != null && agreement.IsValid == true)
 
             {
 
-                var obj = await _oBMSDbContext.InventoryCategories.Where(x => x.Cat == cat).ToListAsync();
+                var obj = await _oBMSDbContext.InventoryCategories
+                    .Where(x => x.Cat == cat || (cat == "U" && x.Cat == "O"))
+                    .OrderBy(x => x.Name)
+                    .ToListAsync();
 
 
 
@@ -4932,6 +4955,7 @@ if (agreement != null && agreement.IsValid == true)
                             CAST(ClientInvoice.ID AS INT) AS InvoiceID,
                             ClientInvoice.InvoiceNo,
                             ClientInvoice.ServiceCharges - ClientInvoice.Discount + ClientInvoice.TaxAmount AS InvoiceAmount,
+                            ClientInvoice.TaxAmount,
                             InvoicePayments.PaidAmount,
                             ClientInvoice.InvoiceDate,
                             (ClientInvoice.ServiceCharges - ClientInvoice.Discount + ClientInvoice.TaxAmount 
@@ -4967,6 +4991,7 @@ if (agreement != null && agreement.IsValid == true)
                             ClientInvoice.ID AS InvoiceID,
                             ClientInvoice.InvoiceNo,
                             ClientInvoice.ServiceCharges - ClientInvoice.Discount + ClientInvoice.TaxAmount AS InvoiceAmount,
+                            ClientInvoice.TaxAmount,
                             ISNULL(InvoicePayments.PaidAmount,0) AS PaidAmount,
                             ClientInvoice.InvoiceDate,
                             (ClientInvoice.ServiceCharges - ClientInvoice.Discount + ClientInvoice.TaxAmount 

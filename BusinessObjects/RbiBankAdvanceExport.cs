@@ -196,8 +196,7 @@ namespace OBMS.WebAPI.BusinessObjects
             // Data rows
             foreach (var item in exportData)
             {
-                // Use ="value" format so Excel treats account numbers as text, preserving leading zeros
-                csv.AppendLine($"{item.FieldType},{item.TransactionType},{item.BeneficiaryCode},=\"{item.BeneficiaryAccountNumber}\",{item.TransactionAmount},{item.BeneficiaryName},{item.CustomerReferenceNumber},=\"{item.PayerAccountNo}\",{item.PayerName},{item.PayerAddress1},{item.PayerAddress2},{item.PayerAddress3},{item.PayerAddress4},{item.PayerAddress5},{item.PayerAddress6},{item.PayerAddress7},{item.PayerAddress8},{item.PayerAddress9},{item.PayerAddress10},{item.ChargeBearer},{item.ValueDate},{item.IFSCCode},{item.BeneficiaryBankName},{item.BeneficiaryBankBranchName},{item.BeneficiaryEmailId}");
+                csv.AppendLine($"{item.FieldType},{item.TransactionType},{item.BeneficiaryCode},{item.BeneficiaryAccountNumber},{item.TransactionAmount},{item.BeneficiaryName},{item.CustomerReferenceNumber},{item.PayerAccountNo},{item.PayerName},{item.PayerAddress1},{item.PayerAddress2},{item.PayerAddress3},{item.PayerAddress4},{item.PayerAddress5},{item.PayerAddress6},{item.PayerAddress7},{item.PayerAddress8},{item.PayerAddress9},{item.PayerAddress10},{item.ChargeBearer},{item.ValueDate},{item.IFSCCode},{item.BeneficiaryBankName},{item.BeneficiaryBankBranchName},{item.BeneficiaryEmailId}");
             }
 
             return csv.ToString();

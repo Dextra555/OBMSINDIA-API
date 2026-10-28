@@ -594,7 +594,9 @@ namespace OBMS.WebAPI.Controllers
 
                     BillingPINCode = string.IsNullOrWhiteSpace(clientMasterRequestDto.BillingPINCode) ? null : clientMasterRequestDto.BillingPINCode.Trim(),
 
+                    TDSApplicable = clientMasterRequestDto.TDSApplicable,
 
+                    TDSPercentage = clientMasterRequestDto.TDSApplicable ? clientMasterRequestDto.TDSPercentage : 0,
 
                     // Simplified Compliance Field
 
@@ -1999,4 +2001,3 @@ namespace OBMS.WebAPI.Controllers
     }
 
 }
-

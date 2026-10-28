@@ -27,5 +27,8 @@ namespace OBMS.WebAPI.Models.Domain
 
         [StringLength(50)]
         public string? Period { get; set; }
+
+        [StringLength(50)]
+        public string? ToPeriod { get; set; }
     }
 }

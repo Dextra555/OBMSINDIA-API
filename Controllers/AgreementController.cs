@@ -191,6 +191,7 @@ namespace OBMS.WebAPI.Controllers
                 agreement.AgreementEndDate = agreementRequestDto.AgreementEndDate;
                 agreement.QuotationID = agreementRequestDto.QuotationID;
                 agreement.Period = agreementRequestDto.Period;
+                agreement.ToPeriod = agreementRequestDto.ToPeriod;
 
                 if (agreementRequestDto.ID == 0 || createNewRow)
                 {

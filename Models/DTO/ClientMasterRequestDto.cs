@@ -1,4 +1,6 @@
-﻿namespace OBMS.WebAPI.Models.DTO
+﻿using System.ComponentModel.DataAnnotations;
+
+namespace OBMS.WebAPI.Models.DTO
 {
     public class ClientMasterRequestDto
     {
@@ -82,6 +84,11 @@
         public string? BillingState { get; set; }
 
         public string? BillingPINCode { get; set; }
+
+        public bool TDSApplicable { get; set; }
+
+        [Range(0, 100)]
+        public decimal TDSPercentage { get; set; }
         
         // Simplified Compliance Field
         public string? ClientComplianceStatus { get; set; }

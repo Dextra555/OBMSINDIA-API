@@ -87,6 +87,11 @@ namespace OBMS.WebAPI.Models.Domain
         public string? BillingState { get; set; }
 
         public string? BillingPINCode { get; set; }
+
+        public bool TDSApplicable { get; set; }
+
+        [Column(TypeName = "decimal(5,2)")]
+        public decimal TDSPercentage { get; set; }
         
         // Simplified Compliance Field
         public string? ClientComplianceStatus { get; set; }

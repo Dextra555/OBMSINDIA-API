@@ -351,7 +351,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
             throw new NotImplementedException();
         }
 
-        public async Task<Dictionary<string, Object>> GetUtilityMasterList(string invCat, string supplierCat, string userID )
+        public async Task<Dictionary<string, Object>> GetUtilityMasterList(string invCat, string supplierCat, string userID)
         {
 
             var results = new Dictionary<string, Object>();
@@ -390,8 +390,14 @@ namespace OBMS.WebAPI.Repositories.Implementation
                 })
                 .ToListAsync();
 
+            // invCat may be a comma-separated list of Cat codes, e.g. "U" or "U,O"
+            var catCodes = invCat.Split(',')
+                                 .Select(c => c.Trim())
+                                 .Where(c => !string.IsNullOrEmpty(c))
+                                 .ToList();
+
             var categoryList = _oBMSDbContext.InventoryCategories
-    .Where(category => category.Cat == invCat)
+    .Where(category => catCodes.Contains(category.Cat))
     .OrderBy(category => category.Name)
     .Select(category => new
     {
@@ -410,7 +416,8 @@ namespace OBMS.WebAPI.Repositories.Implementation
     .Select(supplier => new
     {
         supplier.Id,
-        supplier.Name
+        supplier.Name,
+        supplier.State
     })
     .ToList();
                 results.Add("supplierList", suppliers);
@@ -423,7 +430,8 @@ namespace OBMS.WebAPI.Repositories.Implementation
     .Select(supplier => new
     {
         supplier.Id,
-        supplier.Name
+        supplier.Name,
+        supplier.State
     })
     .ToList();
 
