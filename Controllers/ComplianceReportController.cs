@@ -3097,11 +3097,15 @@ namespace OBMS.WebAPI.Controllers
                     .ThenBy(ci => ci.InvoiceNo)
                     .ToListAsync();
 
-                // Load supplier names in one round-trip
+                // Load supplier names, GSTNo and PanNo in one round-trip
                 var supplierIds = invoices.Select(ci => ci.Supplier).Distinct().ToList();
-                var suppliers   = await _context.Set<Supplier>()
+                var supplierData = await _context.Set<Supplier>()
                     .Where(s => supplierIds.Contains(s.Id))
-                    .ToDictionaryAsync(s => s.Id, s => s.Name);
+                    .Select(s => new { s.Id, s.Name, s.GSTNo, s.PanNo })
+                    .ToListAsync();
+                var suppliers        = supplierData.ToDictionary(s => s.Id, s => s.Name);
+                var supplierGSTNos   = supplierData.ToDictionary(s => s.Id, s => s.GSTNo ?? "");
+                var supplierPanNos   = supplierData.ToDictionary(s => s.Id, s => s.PanNo ?? "");
 
                 var rows = invoices.Select((ci, idx) =>
                 {
@@ -3159,6 +3163,8 @@ namespace OBMS.WebAPI.Controllers
                         invoiceNo       = ci.InvoiceNo,
                         branch          = ci.Branch,
                         supplierName    = suppliers.TryGetValue(ci.Supplier, out var nm) ? nm : ci.Supplier.ToString(),
+                        gstNo           = supplierGSTNos.TryGetValue(ci.Supplier, out var gn) ? gn : "",
+                        panNo           = supplierPanNos.TryGetValue(ci.Supplier, out var pn) ? pn : "",
                         invoiceTotal    = Math.Round(ci.Total, 2),
                         gstRate         = totalGstPct,
                         gstRateDisplay  = gstRateDisplay,

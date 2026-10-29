@@ -640,6 +640,10 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                 existingClientDetails.TDSPercentage = clientMaster.TDSApplicable ? clientMaster.TDSPercentage : 0;
 
+                existingClientDetails.GSTApplicable = clientMaster.GSTApplicable;
+
+                existingClientDetails.GSTPercentage = (clientMaster.TDSApplicable && clientMaster.GSTApplicable) ? clientMaster.GSTPercentage : 0;
+
                 
 
                 // Update simplified compliance field
@@ -1788,6 +1792,53 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
         }
 
+        #region TDS Master
+
+        public async Task<List<TDSMaster>> GetTDSMasterList()
+        {
+            var result = await _oBMSDbContext.TDSMasters.OrderBy(x => x.ID).ToListAsync();
+            return result;
+        }
+
+        public async Task<TDSMaster> SaveAndUpdateTDSMaster(TDSMaster tdsMaster)
+        {
+            var existing = await _oBMSDbContext.TDSMasters
+                .Where(x => x.ID == tdsMaster.ID)
+                .SingleOrDefaultAsync();
+
+            if (existing != null)
+            {
+                existing.TDSName = tdsMaster.TDSName;
+                existing.TDSPercentage = tdsMaster.TDSPercentage;
+                existing.IsActive = tdsMaster.IsActive;
+                _oBMSDbContext.Update(existing);
+                await _oBMSDbContext.SaveChangesAsync();
+                return existing;
+            }
+            else
+            {
+                _oBMSDbContext.TDSMasters.Add(tdsMaster);
+                await _oBMSDbContext.SaveChangesAsync();
+                return tdsMaster;
+            }
+        }
+
+        public async Task<ActionResult<TDSMaster>> DeleteTDSMasterById(int Id)
+        {
+            var existing = await _oBMSDbContext.TDSMasters
+                .Where(x => x.ID == Id)
+                .SingleOrDefaultAsync();
+
+            if (existing != null)
+            {
+                _oBMSDbContext.TDSMasters.Remove(existing);
+                await _oBMSDbContext.SaveChangesAsync();
+            }
+
+            return new ActionResult<TDSMaster>(existing);
+        }
+
+        #endregion
     }
 
 }

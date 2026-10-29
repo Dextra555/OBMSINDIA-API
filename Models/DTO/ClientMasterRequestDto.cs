@@ -89,6 +89,11 @@ namespace OBMS.WebAPI.Models.DTO
 
         [Range(0, 100)]
         public decimal TDSPercentage { get; set; }
+
+        public bool GSTApplicable { get; set; }
+
+        [Range(0, 100)]
+        public decimal GSTPercentage { get; set; }
         
         // Simplified Compliance Field
         public string? ClientComplianceStatus { get; set; }

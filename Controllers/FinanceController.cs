@@ -2766,11 +2766,13 @@ var sqlQuery = @"
 if (agreement != null && agreement.IsValid == true)
                                 {
                                     var agreementMonth = agreement.AgreementDate.ToString("yyyyMM");
-                                    var agreementEndMonth = agreement.AgreementEndDate.ToString("yyyyMM");
                                     var invoiceMonth = clientInvoiceRequestDto.InvoiceDate.ToString("yyyyMM");
 
+                                    // Only validate end date if it is set and is after the start date (guard against bad data)
+                                    bool endDateIsValid = agreement.AgreementEndDate > agreement.AgreementDate;
+
                                     if (string.CompareOrdinal(invoiceMonth, agreementMonth) < 0 ||
-                                        string.CompareOrdinal(invoiceMonth, agreementEndMonth) > 0)
+                                        (endDateIsValid && string.CompareOrdinal(invoiceMonth, agreement.AgreementEndDate.ToString("yyyyMM")) > 0))
                                     {
                                         return BadRequest(new { error = $"Invoice period is outside the agreement period for client {clientInvoiceRequestDto.Client}. Unable to process invoice." });
                                     }
@@ -3026,11 +3028,13 @@ if (agreement != null && agreement.IsValid == true)
                     if (agreement != null && agreement.IsValid == true)
                     {
                         var agreementMonth = agreement.AgreementDate.ToString("yyyyMM");
-                        var agreementEndMonth = agreement.AgreementEndDate.ToString("yyyyMM");
                         var invoiceMonth = clientInvoiceRequestDto.InvoiceDate.ToString("yyyyMM");
 
+                        // Only validate end date if it is set and is after the start date (guard against bad data)
+                        bool endDateIsValid = agreement.AgreementEndDate > agreement.AgreementDate;
+
                         if (string.CompareOrdinal(invoiceMonth, agreementMonth) < 0 ||
-                            string.CompareOrdinal(invoiceMonth, agreementEndMonth) > 0)
+                            (endDateIsValid && string.CompareOrdinal(invoiceMonth, agreement.AgreementEndDate.ToString("yyyyMM")) > 0))
                         {
                             return BadRequest(new { error = "Invoice period is outside the agreement period. Unable to process invoice." });
                         }
@@ -4955,6 +4959,7 @@ if (agreement != null && agreement.IsValid == true)
                             CAST(ClientInvoice.ID AS INT) AS InvoiceID,
                             ClientInvoice.InvoiceNo,
                             ClientInvoice.ServiceCharges - ClientInvoice.Discount + ClientInvoice.TaxAmount AS InvoiceAmount,
+                            ClientInvoice.ServiceCharges - ClientInvoice.Discount AS ServiceAmount,
                             ClientInvoice.TaxAmount,
                             InvoicePayments.PaidAmount,
                             ClientInvoice.InvoiceDate,
@@ -4991,6 +4996,7 @@ if (agreement != null && agreement.IsValid == true)
                             ClientInvoice.ID AS InvoiceID,
                             ClientInvoice.InvoiceNo,
                             ClientInvoice.ServiceCharges - ClientInvoice.Discount + ClientInvoice.TaxAmount AS InvoiceAmount,
+                            ClientInvoice.ServiceCharges - ClientInvoice.Discount AS ServiceAmount,
                             ClientInvoice.TaxAmount,
                             ISNULL(InvoicePayments.PaidAmount,0) AS PaidAmount,
                             ClientInvoice.InvoiceDate,

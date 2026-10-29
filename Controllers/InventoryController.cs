@@ -326,7 +326,12 @@ namespace OBMS.WebAPI.Controllers
                 obj.Category = dto.Category;
                 obj.LASTUPDATE = DateTime.Now;
                 obj.LastUpdatedBy = dto.LastUpdatedBy;
-
+                obj.IsTax = dto.IsTax;
+                obj.GSTNo = dto.GSTNo;
+                obj.PanNo = dto.PanNo;
+                obj.GSTPercentage = dto.GSTPercentage;
+                obj.IsTDS = dto.IsTDS;
+                obj.TDSPercentage = dto.TDSPercentage;
 
                 await _inventoryRepository.SaveAndUpdateSupplier(obj);
 
@@ -368,7 +373,32 @@ namespace OBMS.WebAPI.Controllers
             {
                 var data = await _inventoryRepository.GetSupplierByID(ID);
 
-                return data;
+                // Return as explicit object to ensure consistent property names
+                return Ok(new
+                {
+                    Id = data.Id,
+                    Code = data.Code,
+                    Name = data.Name,
+                    Address1 = data.Address1,
+                    Address2 = data.Address2,
+                    PostCode = data.PostCode,
+                    City = data.City,
+                    State = data.State,
+                    Phone = data.Phone,
+                    Fax = data.Fax,
+                    CreditLimit = data.CreditLimit,
+                    Status = data.Status,
+                    ContactPerson = data.ContactPerson,
+                    Category = data.Category,
+                    LASTUPDATE = data.LASTUPDATE,
+                    LastUpdatedBy = data.LastUpdatedBy,
+                    IsTax = data.IsTax,
+                    GSTNo = data.GSTNo,
+                    PanNo = data.PanNo,
+                    GSTPercentage = data.GSTPercentage,
+                    IsTDS = data.IsTDS,
+                    TDSPercentage = data.TDSPercentage
+                });
             }
             catch (Exception ex)
             {

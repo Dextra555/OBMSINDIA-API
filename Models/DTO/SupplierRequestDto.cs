@@ -18,5 +18,11 @@
         public string Category { get; set; }
         public DateTime LASTUPDATE { get; set; }
         public string? LastUpdatedBy { get; set; }
+        public bool IsTax { get; set; }
+        public string? GSTNo { get; set; }
+        public string? PanNo { get; set; }
+        public decimal? GSTPercentage { get; set; }
+        public bool IsTDS { get; set; }
+        public decimal? TDSPercentage { get; set; }
     }
 }

@@ -76,7 +76,27 @@ namespace OBMS.WebAPI.Controllers
         {
             try
             {
-                var employeeData = await (
+                bool isSuperAdmin = string.Equals(name?.Trim(), "superadmin", StringComparison.OrdinalIgnoreCase)
+                                    || string.Equals(name?.Trim(), "none", StringComparison.OrdinalIgnoreCase);
+
+                // Get the allowed branch codes for this user (only IsAllowed == true)
+                List<string> allowedBranchCodes;
+                if (isSuperAdmin)
+                {
+                    // superadmin / no-user sees all branches
+                    allowedBranchCodes = await _oBMSDbContext.BranchMasters
+                        .Select(b => b.Code)
+                        .ToListAsync();
+                }
+                else
+                {
+                    allowedBranchCodes = await _oBMSDbContext.OBMSBranches
+                        .Where(ob => ob.Name == name && ob.IsAllowed == true)
+                        .Select(ob => ob.BranchCode)
+                        .ToListAsync();
+                }
+
+                var employeeQuery =
                     from emp in _oBMSDbContext.Employees
                     join empDetails in _oBMSDbContext.EmploymentDetails
                         on emp.EMP_CODE equals empDetails.EMPPAY_CODE into empGroup
@@ -85,6 +105,7 @@ namespace OBMS.WebAPI.Controllers
                     from department in deptGroup.DefaultIfEmpty()
                     join desig in _oBMSDbContext.Designations on emp.DesignationId equals desig.DesignationId into desigGroup
                     from designation in desigGroup.DefaultIfEmpty()
+                    where allowedBranchCodes.Contains(emp.EMP_BRANCH_CODE)
                     orderby emp.EMP_ID descending
                     select new
                     {
@@ -112,31 +133,24 @@ namespace OBMS.WebAPI.Controllers
                         EMPPAY_DATE_JOINED = details != null ? details.EMPPAY_DATE_JOINED : (DateTime?)null,
                         EMPPAY_DATE_RESIGNED = details != null && details.EMPPAY_DATE_RESIGNED.HasValue ? details.EMPPAY_DATE_RESIGNED.Value : (DateTime?)null,
                         EMPPAY_CATEGORY = details != null ? details.EMPPAY_CATEGORY : null
-                    }).ToListAsync();
+                    };
 
-            var results = new Dictionary<string, object>
-            {
-                { "employees", employeeData }
-            };
+                var employeeData = await employeeQuery.ToListAsync();
 
-            if (name != "none")
-            {
-                var branchList = await (
-                    from branchMaster in _oBMSDbContext.BranchMasters
-                    join obmsBranches in _oBMSDbContext.OBMSBranches
-                        on branchMaster.Code equals obmsBranches.BranchCode
-                    where obmsBranches.Name == name
-                    orderby branchMaster.Name
-                    select new
-                    {
-                        branchMaster.Code,
-                        branchMaster.Name
-                    }).ToListAsync();
+                // Build allowed branch list for the dropdown
+                var branchList = await _oBMSDbContext.BranchMasters
+                    .Where(bm => allowedBranchCodes.Contains(bm.Code))
+                    .OrderBy(bm => bm.Name)
+                    .Select(bm => new { bm.Code, bm.Name })
+                    .ToListAsync();
 
-                results.Add("branchList", branchList);
-            }
+                var results = new Dictionary<string, object>
+                {
+                    { "employees", employeeData },
+                    { "branchList", branchList }
+                };
 
-            return results;
+                return results;
             }
             catch (Exception ex)
             {

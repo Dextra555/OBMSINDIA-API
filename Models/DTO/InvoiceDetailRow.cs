@@ -7,6 +7,7 @@ namespace OBMS.WebAPI.Models.DTO
         public int InvoiceID { get; set; }
         public string InvoiceNo { get; set; }
         public decimal InvoiceAmount { get; set; }
+        public decimal ServiceAmount { get; set; }
         public decimal TaxAmount { get; set; }
         public decimal PaidAmount { get; set; }
         public DateTime InvoiceDate { get; set; }

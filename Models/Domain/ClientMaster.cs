@@ -92,6 +92,11 @@ namespace OBMS.WebAPI.Models.Domain
 
         [Column(TypeName = "decimal(5,2)")]
         public decimal TDSPercentage { get; set; }
+
+        public bool GSTApplicable { get; set; }
+
+        [Column(TypeName = "decimal(5,2)")]
+        public decimal GSTPercentage { get; set; }
         
         // Simplified Compliance Field
         public string? ClientComplianceStatus { get; set; }

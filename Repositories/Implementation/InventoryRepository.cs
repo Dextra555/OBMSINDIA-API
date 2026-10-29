@@ -417,7 +417,11 @@ namespace OBMS.WebAPI.Repositories.Implementation
     {
         supplier.Id,
         supplier.Name,
-        supplier.State
+        supplier.State,
+        supplier.IsTax,
+        supplier.GSTPercentage,
+        supplier.IsTDS,
+        supplier.TDSPercentage
     })
     .ToList();
                 results.Add("supplierList", suppliers);
@@ -431,7 +435,11 @@ namespace OBMS.WebAPI.Repositories.Implementation
     {
         supplier.Id,
         supplier.Name,
-        supplier.State
+        supplier.State,
+        supplier.IsTax,
+        supplier.GSTPercentage,
+        supplier.IsTDS,
+        supplier.TDSPercentage
     })
     .ToList();
 

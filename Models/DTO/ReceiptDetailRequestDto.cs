@@ -10,6 +10,7 @@
         public int BalanceStatus { get; set; }
         public decimal BalanceAmount { get; set; }
         public decimal InvoiceAmount { get; set; }
+        public decimal ServiceAmount { get; set; }
         public decimal TaxAmount { get; set; }
         public decimal PaidAmount { get; set; }
         public DateTime InvoiceDate { get; set; }

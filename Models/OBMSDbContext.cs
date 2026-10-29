@@ -91,6 +91,7 @@ public partial class OBMSDbContext : DbContext
     public DbSet<ESIConfiguration> ESIConfigurations { get; set; }
     public DbSet<ESIReasonCode> ESIReasonCodes { get; set; }
     public DbSet<TDSSlabConfiguration> TDSSlabConfigurations { get; set; }
+    public DbSet<TDSMaster> TDSMasters { get; set; }
     public DbSet<ServiceType> ServiceTypes { get; set; }
     public DbSet<TDSReportResult> TDSReportResults { get; set; }
     public DbSet<OutTDSReportResult> OutTDSReportResults { get; set; }

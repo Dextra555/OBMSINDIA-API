@@ -377,6 +377,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
                                      PaidAmount = d.Amount,
                                      InvoiceNo = c.InvoiceNo,
                                      InvoiceAmount = c.ServiceCharges - c.Discount + c.TaxAmount,
+                                     ServiceAmount = c.ServiceCharges - c.Discount,
                                      TaxAmount = c.TaxAmount,
                                      InvoiceDate = c.InvoiceDate
                                  }).ToArrayAsync();

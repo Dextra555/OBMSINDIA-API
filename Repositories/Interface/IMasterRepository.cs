@@ -104,6 +104,11 @@ namespace OBMS.WebAPI.Repositories.Interface
 
         string GetBranchMasterCode();
 
+        // TDS Master
+        Task<List<TDSMaster>> GetTDSMasterList();
+        Task<TDSMaster> SaveAndUpdateTDSMaster(TDSMaster tdsMaster);
+        Task<ActionResult<TDSMaster>> DeleteTDSMasterById(int Id);
+
     }
 
 }

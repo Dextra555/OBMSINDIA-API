@@ -598,6 +598,10 @@ namespace OBMS.WebAPI.Controllers
 
                     TDSPercentage = clientMasterRequestDto.TDSApplicable ? clientMasterRequestDto.TDSPercentage : 0,
 
+                    GSTApplicable = clientMasterRequestDto.GSTApplicable,
+
+                    GSTPercentage = (clientMasterRequestDto.TDSApplicable && clientMasterRequestDto.GSTApplicable) ? clientMasterRequestDto.GSTPercentage : 0,
+
                     // Simplified Compliance Field
 
                     ClientComplianceStatus = clientMasterRequestDto.ClientComplianceStatus ?? "non_compliance_client"
@@ -1993,6 +1997,77 @@ namespace OBMS.WebAPI.Controllers
         }
 
 
+
+        #endregion
+
+        #region TDS Master
+
+        [HttpGet]
+        [Route("GetTDSMasterList")]
+        public async Task<ActionResult<List<TDSMasterRequestDto>>> GetTDSMasterList()
+        {
+            try
+            {
+                var list = await _masterRepository.GetTDSMasterList();
+                return Ok(list);
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+        }
+
+        [HttpPost]
+        [Route("SaveAndUpdateTDSMaster")]
+        public async Task<ActionResult<HttpResponseMessage>> SaveAndUpdateTDSMaster(TDSMasterRequestDto dto)
+        {
+            try
+            {
+                var tdsMaster = new TDSMaster()
+                {
+                    ID = dto.ID,
+                    TDSName = dto.TDSName,
+                    TDSPercentage = dto.TDSPercentage,
+                    IsActive = dto.IsActive
+                };
+
+                await _masterRepository.SaveAndUpdateTDSMaster(tdsMaster);
+
+                if (tdsMaster != null)
+                {
+                    Dictionary<string, object> dictResult = new Dictionary<string, object>();
+                    dictResult.Add("Success", "Success");
+                    dictResult.Add("TDSMaster", tdsMaster);
+                    return Ok(dictResult);
+                }
+                else
+                {
+                    response.Headers.Add("Failure", "TDS Master save & update failed. Please check your details.");
+                }
+
+                return response;
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { Success = "Error", Message = ex.Message });
+            }
+        }
+
+        [HttpDelete("DeleteTDSMasterById")]
+        public async Task<ActionResult<HttpResponseMessage>> DeleteTDSMasterById(int Id)
+        {
+            try
+            {
+                await _masterRepository.DeleteTDSMasterById(Id);
+                response.Headers.Add("Success", "Successfully deleted TDS Master record.");
+            }
+            catch (Exception ex)
+            {
+                throw;
+            }
+
+            return response;
+        }
 
         #endregion
 

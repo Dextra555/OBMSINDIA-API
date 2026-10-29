@@ -1,5 +1,6 @@
 ﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json.Serialization;
 
 namespace OBMS.WebAPI.Models.Domain
 {
@@ -23,8 +24,16 @@ namespace OBMS.WebAPI.Models.Domain
         public string Category { get; set; }
         public DateTime LASTUPDATE { get; set; }
         public string? LastUpdatedBy { get; set; }
+        public bool IsTax { get; set; }
 
+        [JsonPropertyName("GSTNo")]
+        public string? GSTNo { get; set; }
 
+        [JsonPropertyName("PanNo")]
+        public string? PanNo { get; set; }
 
+        public decimal? GSTPercentage { get; set; }
+        public bool IsTDS { get; set; }
+        public decimal? TDSPercentage { get; set; }
     }
 }
