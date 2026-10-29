@@ -13,6 +13,19 @@
     </Content>
   </ItemGroup>
 
+  <!-- The local publish output folders (publish\, publish_output\) live inside the
+       project directory. The SDK's default recursive None/Content globs (which exclude
+       only bin\** and obj\**) re-include their contents and republish them on every run,
+       creating a self-nesting publish\publish\publish\... recursion that fails with
+       MSB3094 ("DestinationFiles refers to 1 item(s), SourceFiles refers to N item(s)").
+       Exclude these output folders from default items, the same way bin\ and obj\ are. -->
+  <ItemGroup>
+    <None Remove="publish\**" />
+    <None Remove="publish_output\**" />
+    <Content Remove="publish\**" />
+    <Content Remove="publish_output\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="BoldReports.Net.Core" Version="5.3.10" />
     <PackageReference Include="ClosedXML" Version="0.105.0" />
@@ -32,5 +45,63 @@
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
   </ItemGroup>
+
+  <!-- =====================================================================
+       In-place workaround for MSB3094 on paths that contain an apostrophe.
+
+       This project lives under D:\correct crystal report'\India Live\... . The .NET
+       SDK publish targets copy files with a single-quoted MSBuild transform:
+
+           DestinationFiles="@(_ResolvedFileToPublishPreserveNewest->'$(PublishDir)%(RelativePath)')"
+
+       $(PublishDir) is absolute and contains an apostrophe, which terminates that
+       single-quoted string early, so every source file collapses to one destination and
+       publish fails: MSB3094 "DestinationFiles refers to 1 item(s), SourceFiles
+       refers to N item(s)".
+
+       Fix: run before each of the SDK's two copy targets, build each destination into
+       item METADATA (an apostrophe in a metadata VALUE is safe; only an apostrophe in
+       the transform template literal breaks parsing), do the copy ourselves, then clear
+       the SDK item so the SDK target becomes a no-op. Remove this (and rename the folder
+       to drop the apostrophe) if the project is ever moved to an apostrophe-free path.
+  ===================================================================== -->
+  <Target Name="_ApostropheFix_CopyPreserveNewest"
+          BeforeTargets="_CopyResolvedFilesToPublishPreserveNewest">
+    <ItemGroup>
+      <_ApostropheFix_PN Include="@(_ResolvedFileToPublishPreserveNewest)">
+        <Destination>$(PublishDir)%(RelativePath)</Destination>
+      </_ApostropheFix_PN>
+      <_ResolvedFileToPublishPreserveNewest Remove="@(_ResolvedFileToPublishPreserveNewest)" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_ApostropheFix_PN)"
+          DestinationFiles="@(_ApostropheFix_PN->'%(Destination)')"
+          OverwriteReadOnlyFiles="$(OverwriteReadOnlyFiles)"
+          Retries="$(CopyRetryCount)"
+          RetryDelayMilliseconds="$(CopyRetryDelayMilliseconds)"
+          UseHardlinksIfPossible="$(CreateHardLinksForPublishFilesIfPossible)"
+          UseSymbolicLinksIfPossible="$(CreateSymbolicLinksForPublishFilesIfPossible)">
+      <Output TaskParameter="DestinationFiles" ItemName="FileWrites" />
+    </Copy>
+  </Target>
+
+  <Target Name="_ApostropheFix_CopyAlways"
+          BeforeTargets="_CopyResolvedFilesToPublishAlways">
+    <ItemGroup>
+      <_ApostropheFix_PA Include="@(_ResolvedFileToPublishAlways)">
+        <Destination>$(PublishDir)%(RelativePath)</Destination>
+      </_ApostropheFix_PA>
+      <_ResolvedFileToPublishAlways Remove="@(_ResolvedFileToPublishAlways)" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_ApostropheFix_PA)"
+          DestinationFiles="@(_ApostropheFix_PA->'%(Destination)')"
+          SkipUnchangedFiles="$(SkipCopyUnchangedFiles)"
+          OverwriteReadOnlyFiles="$(OverwriteReadOnlyFiles)"
+          Retries="$(CopyRetryCount)"
+          RetryDelayMilliseconds="$(CopyRetryDelayMilliseconds)"
+          UseHardlinksIfPossible="$(CreateHardLinksForPublishFilesIfPossible)"
+          UseSymbolicLinksIfPossible="$(CreateSymbolicLinksForPublishFilesIfPossible)">
+      <Output TaskParameter="DestinationFiles" ItemName="FileWrites" />
+    </Copy>
+  </Target>
 
 </Project>
