@@ -12,7 +12,7 @@ namespace OBMS.WebAPI.Repositories.Interface
 
         Task<Dictionary<string, Object>> GetAgreementByID(int id);
 
-        Task<List<Object>> GetAgreements(string branchId);
+        Task<List<Object>> GetAgreements(string branchId, string userName = "");
 
         Task<Object> CheckClientStatus(string branchId,string clientId,string status);
 

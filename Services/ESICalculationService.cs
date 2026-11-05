@@ -111,38 +111,98 @@ namespace OBMS.WebAPI.Services
         // ── Helpers ──────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Calculates employee ESI for Indian payroll — matches Crystal Report formula exactly.
+        /// Main ESI payslip calculation — respects CalculationBasis from ESIConfiguration.
         ///
-        /// Crystal formula:
-        ///   gross   = EarnedSalary − CB_AdvanceStatutoryBonus
-        ///   if gross &lt; BasicSalaryLimit (₹21,000)
-        ///       ESI = Round(gross × EmployeeRate / 100, 0)   [0.75%]
-        ///   else
-        ///       ESI = 0
+        /// "Gross"   → ESI Wage = EarnedSalary − CB_AdvanceStatutoryBonus
+        ///             Prorated by worked days: ESIWage / CalendarDays × WorkedDays
+        ///             Limit check: if ESI Wage ≤ BasicSalaryLimit (₹21,000) → apply, else 0
+        ///
+        /// "BasicDA" → ESI Wage = (CB_Basic + CB_DA) / CalendarDays × WorkedDays
+        ///             NO limit check — always apply ESI on prorated Basic+DA
+        ///             Formula: ESI = Round(ESIWage × EmployeeRate / 100, 0)
+        ///
+        /// Example (full month 31 days): Basic=6680, DA=7353
+        ///   ESIWage = (6680+7353)/31×31 = 14,033  →  ESI = Round(14033×0.75%) = 105
+        ///
+        /// Example (30 days worked, 31 calendar): Basic=6680, DA=7353
+        ///   ESIWage = (6680+7353)/31×30 = 13,580  →  ESI = Round(13580×0.75%) = 102
         /// </summary>
         public (decimal ESI, decimal ESIWage) CalculateESIForPayslip(
             decimal earnedSalary,
             decimal cbAdvanceStatutoryBonus,
+            decimal cbBasic,
+            decimal cbDA,
+            DateTime calculationDate)
+        {
+            return CalculateESIForPayslip(
+                earnedSalary, cbAdvanceStatutoryBonus, cbBasic, cbDA,
+                calendarDays: 0, workedDays: 0,   // 0 = no proration (full month)
+                calculationDate);
+        }
+
+        /// <summary>
+        /// ESI payslip calculation with Total Working Days proration.
+        /// Pass calendarDays and workedDays to prorate ESI wage.
+        /// If calendarDays=0 or workedDays=calendarDays → no proration (full month).
+        /// </summary>
+        public (decimal ESI, decimal ESIWage) CalculateESIForPayslip(
+            decimal earnedSalary,
+            decimal cbAdvanceStatutoryBonus,
+            decimal cbBasic,
+            decimal cbDA,
+            int calendarDays,
+            decimal workedDays,
             DateTime calculationDate)
         {
             var esiConfig = GetActiveESIConfiguration(calculationDate);
             if (esiConfig == null)
                 return (0m, 0m);
 
-            // Step 1 — ESI wage = EarnedSalary minus Advance Statutory Bonus
-            decimal esiWage = Math.Round(earnedSalary - cbAdvanceStatutoryBonus, 2);
-            if (esiWage < 0) esiWage = 0;
+            decimal esiWage;
 
-            // Step 2 — only applicable if esiWage < BasicSalaryLimit (₹21,000)
-            if (esiWage >= esiConfig.BasicSalaryLimit)
-                return (0m, esiWage);
+            if (string.Equals(esiConfig.CalculationBasis, "BasicDA", StringComparison.OrdinalIgnoreCase))
+            {
+                // BasicDA basis: ESI Wage = (Basic + DA) / CalendarDays × WorkedDays
+                decimal fullWage = cbBasic + cbDA;
+                esiWage = (calendarDays > 0 && workedDays > 0 && workedDays < calendarDays)
+                    ? Math.Round(fullWage / calendarDays * workedDays, 2)
+                    : fullWage;
 
-            // Step 3 — ESI = Round(esiWage × EmployeeRate / 100, 0)
-            // Use MidpointRounding.AwayFromZero to match Crystal Report Round() behaviour
-            // (Crystal rounds 0.5 UP, C# default banker's rounding rounds 0.5 to nearest even)
-            decimal esi = Math.Round(esiWage * esiConfig.EmployeeRate / 100m, 0, MidpointRounding.AwayFromZero);
+                if (esiWage <= 0)
+                    return (0m, 0m);
 
-            return (esi, esiWage);
+                // ESI = Round(ESI Wage × EmployeeRate / 100, 0)
+                decimal esi = Math.Round(esiWage * esiConfig.EmployeeRate / 100m, 0, MidpointRounding.AwayFromZero);
+                return (esi, esiWage);
+            }
+            else
+            {
+                // Gross basis: ESI Wage = (EarnedSalary − Bonus) / CalendarDays × WorkedDays
+                decimal fullWage = Math.Round(earnedSalary - cbAdvanceStatutoryBonus, 2);
+                if (fullWage < 0) fullWage = 0;
+
+                esiWage = (calendarDays > 0 && workedDays > 0 && workedDays < calendarDays)
+                    ? Math.Round(fullWage / calendarDays * workedDays, 2)
+                    : fullWage;
+
+                // Gross basis: limit check — ESI only if wage ≤ ₹21,000
+                if (esiWage >= esiConfig.BasicSalaryLimit)
+                    return (0m, esiWage);
+
+                decimal esi = Math.Round(esiWage * esiConfig.EmployeeRate / 100m, 0, MidpointRounding.AwayFromZero);
+                return (esi, esiWage);
+            }
+        }
+
+        /// <summary>
+        /// Backward-compatible overload — Gross basis, cbBasic=0, cbDA=0.
+        /// </summary>
+        public (decimal ESI, decimal ESIWage) CalculateESIForPayslip(
+            decimal earnedSalary,
+            decimal cbAdvanceStatutoryBonus,
+            DateTime calculationDate)
+        {
+            return CalculateESIForPayslip(earnedSalary, cbAdvanceStatutoryBonus, 0m, 0m, 0, 0, calculationDate);
         }
 
         private ESIConfiguration GetActiveESIConfiguration(DateTime calculationDate)

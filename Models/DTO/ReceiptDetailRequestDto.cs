@@ -6,6 +6,7 @@
         public decimal ReceiptID { get; set; }
         public decimal InvoiceID { get; set; }
         public string InvoiceNo { get; set; }
+        public string? Client { get; set; }
         public decimal Amount { get; set; }
         public int BalanceStatus { get; set; }
         public decimal BalanceAmount { get; set; }

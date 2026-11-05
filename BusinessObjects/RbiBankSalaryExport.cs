@@ -63,7 +63,7 @@ namespace OBMS.WebAPI.BusinessObjects
             return Math.Round(amount, MidpointRounding.AwayFromZero).ToString("0");
         }
 
-        public static List<RbiBankSalaryExport> GetRbiBankSalaryExportData(string dtSalaryPeriod, string branch, string employeeType)
+        public static List<RbiBankSalaryExport> GetRbiBankSalaryExportData(string dtSalaryPeriod, string branch, string employeeType, string client = "")
         {
             try
             {
@@ -87,6 +87,11 @@ namespace OBMS.WebAPI.BusinessObjects
                     if (!string.IsNullOrEmpty(employeeType) && employeeType != "ALL")
                     {
                         whereClause += " AND Employee.EMP_ROLE = @EmployeeType ";
+                    }
+
+                    if (!string.IsNullOrEmpty(client) && client != "ALL")
+                    {
+                        whereClause += " AND Employee.EMP_CLIENT = @Client ";
                     }
 
                     cmd.CommandText = @"SELECT
@@ -131,6 +136,11 @@ namespace OBMS.WebAPI.BusinessObjects
                     if (!string.IsNullOrEmpty(employeeType) && employeeType != "ALL")
                     {
                         cmd.Parameters.AddWithValue("@EmployeeType", employeeType);
+                    }
+
+                    if (!string.IsNullOrEmpty(client) && client != "ALL")
+                    {
+                        cmd.Parameters.AddWithValue("@Client", client);
                     }
 
                     using (SQLDataAccess sdaFactory = new SQLDataAccess(configuration))

@@ -37,5 +37,15 @@ namespace OBMS.WebAPI.Models.Domain
         [Column("Financial_Year")]
         [StringLength(9)]
         public string FinancialYear { get; set; } = "2024-2025";
+
+        /// <summary>
+        /// ESI wage calculation basis:
+        ///   "Gross"   → ESI Wage = EarnedSalary − CB_AdvanceStatutoryBonus  (default/legacy)
+        ///   "BasicDA" → ESI Wage = CB_Basic + CB_DA  (as per ESI Act: Basic + DA only)
+        /// </summary>
+        [Required]
+        [Column("Calculation_Basis")]
+        [StringLength(10)]
+        public string CalculationBasis { get; set; } = "Gross";
     }
 }

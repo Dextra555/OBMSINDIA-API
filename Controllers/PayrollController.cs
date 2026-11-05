@@ -2925,7 +2925,7 @@ var sqlQuery = @"
 
         [Route("GetRbiBankSalaryExport")]
 
-        public IActionResult GetRbiBankSalaryExport(string dtSalaryPeriod, string branch = "ALL", string employeeType = "ALL")
+        public IActionResult GetRbiBankSalaryExport(string dtSalaryPeriod, string branch = "ALL", string employeeType = "ALL", string client = "")
 
         {
 
@@ -2933,7 +2933,7 @@ var sqlQuery = @"
 
             {
 
-                var result = _payrollRepository.GetRbiBankSalaryExportData(dtSalaryPeriod, branch, employeeType);
+                var result = _payrollRepository.GetRbiBankSalaryExportData(dtSalaryPeriod, branch, employeeType, client);
 
                 return Ok(result);
 
@@ -2953,7 +2953,7 @@ var sqlQuery = @"
 
         [Route("GetRbiBankSalaryExportCsv")]
 
-        public IActionResult GetRbiBankSalaryExportCsv(string dtSalaryPeriod, string branch = "ALL", string employeeType = "ALL")
+        public IActionResult GetRbiBankSalaryExportCsv(string dtSalaryPeriod, string branch = "ALL", string employeeType = "ALL", string client = "")
 
         {
 
@@ -2961,7 +2961,7 @@ var sqlQuery = @"
 
             {
 
-                var exportData = _payrollRepository.GetRbiBankSalaryExportData(dtSalaryPeriod, branch, employeeType);
+                var exportData = _payrollRepository.GetRbiBankSalaryExportData(dtSalaryPeriod, branch, employeeType, client);
 
                 var csvBytes = RbiBankSalaryExport.GenerateCsvExportBytes(exportData);
 
@@ -2989,7 +2989,7 @@ var sqlQuery = @"
 
         [Route("GetRbiBankSalaryExportTxt")]
 
-        public IActionResult GetRbiBankSalaryExportTxt(string dtSalaryPeriod, string branch = "ALL", string employeeType = "ALL")
+        public IActionResult GetRbiBankSalaryExportTxt(string dtSalaryPeriod, string branch = "ALL", string employeeType = "ALL", string client = "")
 
         {
 
@@ -2997,7 +2997,7 @@ var sqlQuery = @"
 
             {
 
-                var exportData = _payrollRepository.GetRbiBankSalaryExportData(dtSalaryPeriod, branch, employeeType);
+                var exportData = _payrollRepository.GetRbiBankSalaryExportData(dtSalaryPeriod, branch, employeeType, client);
 
                 var txtBytes = RbiBankSalaryExport.GenerateTxtExportBytes(exportData);
 

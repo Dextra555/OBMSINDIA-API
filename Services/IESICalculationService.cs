@@ -9,18 +9,40 @@ namespace OBMS.WebAPI.Services
         bool IsESIApplicable(decimal grossSalary, DateTime calculationDate);
 
         /// <summary>
-        /// Calculates employee ESI contribution for Indian payroll.
-        /// Matches Crystal Report formula exactly:
-        ///   esiWage = EarnedSalary − CB_AdvanceStatutoryBonus
-        ///   if esiWage &lt; BasicSalaryLimit (₹21,000 from ESIConfiguration)
-        ///       ESI = Round(esiWage × EmployeeRate / 100, 0)   [0.75%]
-        ///   else
-        ///       ESI = 0
+        /// Calculates employee ESI contribution for Indian payroll with Working Days proration.
+        /// Basis is determined by ESIConfiguration.CalculationBasis:
+        ///
+        ///   "BasicDA" → ESI Wage = (CB_Basic + CB_DA) / CalendarDays × WorkedDays
+        ///               ESI = Round(ESIWage × EmployeeRate / 100, 0)
+        ///
+        ///   "Gross"   → ESI Wage = (EarnedSalary − Bonus) / CalendarDays × WorkedDays
+        ///               if ESI Wage ≤ BasicSalaryLimit (₹21,000) → apply, else 0
+        ///
+        /// Example (Basic=6680, DA=7353, WD=30, CalDays=31):
+        ///   ESIWage = (6680+7353)/31×30 = 13,580  →  ESI = Round(13580×0.75%) = 102
         /// </summary>
-        /// <param name="earnedSalary">Pre-calculated EarnedSalary (BasicSalaryDays × PerDaySalary)</param>
-        /// <param name="cbAdvanceStatutoryBonus">CB_AdvanceStatutoryBonus to deduct from wage</param>
-        /// <param name="calculationDate">Salary period date (for ESIConfiguration lookup)</param>
-        /// <returns>Tuple of (ESI employee contribution, ESIWage used)</returns>
+        (decimal ESI, decimal ESIWage) CalculateESIForPayslip(
+            decimal earnedSalary,
+            decimal cbAdvanceStatutoryBonus,
+            decimal cbBasic,
+            decimal cbDA,
+            int calendarDays,
+            decimal workedDays,
+            DateTime calculationDate);
+
+        /// <summary>
+        /// Overload without proration (full month) — used by API payslip methods.
+        /// </summary>
+        (decimal ESI, decimal ESIWage) CalculateESIForPayslip(
+            decimal earnedSalary,
+            decimal cbAdvanceStatutoryBonus,
+            decimal cbBasic,
+            decimal cbDA,
+            DateTime calculationDate);
+
+        /// <summary>
+        /// Backward-compatible overload — Gross basis, cbBasic=0, cbDA=0.
+        /// </summary>
         (decimal ESI, decimal ESIWage) CalculateESIForPayslip(
             decimal earnedSalary,
             decimal cbAdvanceStatutoryBonus,

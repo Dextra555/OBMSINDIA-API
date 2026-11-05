@@ -288,12 +288,18 @@ namespace OBMS.WebAPI.Repositories.Implementation
         {
             var results = new Dictionary<string, Object>();
 
-            var branchs = await (from branchMaster in _oBMSDbContext.BranchMasters
-                                 join obmsBranches in _oBMSDbContext.OBMSBranches
-                                 on branchMaster.Code equals obmsBranches.BranchCode
-                                 where obmsBranches.Name == userID
-                                 orderby branchMaster.Name
-                                 select new { branchMaster.Code, branchMaster.Name }).ToListAsync();
+            var isSuperAdmin = userID == "superadmin";
+            var branchs = isSuperAdmin
+                ? await _oBMSDbContext.BranchMasters
+                    .OrderBy(b => b.Name)
+                    .Select(b => new { b.Code, b.Name })
+                    .ToListAsync()
+                : await (from branchMaster in _oBMSDbContext.BranchMasters
+                         join obmsBranches in _oBMSDbContext.OBMSBranches
+                         on branchMaster.Code equals obmsBranches.BranchCode
+                         where obmsBranches.Name == userID && obmsBranches.IsAllowed == true
+                         orderby branchMaster.Name
+                         select new { branchMaster.Code, branchMaster.Name }).ToListAsync();
 
             results.Add("branchList", branchs);
 
@@ -374,6 +380,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
                                      ID = d.ID,
                                      ReceiptID = d.ReceiptID,
                                      InvoiceID = d.InvoiceID,
+                                     Client = c.Client,
                                      PaidAmount = d.Amount,
                                      InvoiceNo = c.InvoiceNo,
                                      InvoiceAmount = c.ServiceCharges - c.Discount + c.TaxAmount,
@@ -411,7 +418,8 @@ namespace OBMS.WebAPI.Repositories.Implementation
                 IsDeleted = receipt.IsDeleted,
                 LastUpdate = receipt.LastUpdate,
                 LastUpdatedBy = receipt.LastUpdatedBy,
-                details = details
+                details = details,
+                client = details.Length > 0 ? details[0].Client : null
             };
 
             return receiptDto;

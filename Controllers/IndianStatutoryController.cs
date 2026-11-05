@@ -223,7 +223,8 @@ namespace OBMS.WebAPI.Controllers
                     
                     var query = @"
                         SELECT Id, Gross_Salary_Limit, Employee_Rate, Employer_Rate,
-                               Effective_Date, Is_Active, Created_Date, Financial_Year
+                               Effective_Date, Is_Active, Created_Date, Financial_Year,
+                               ISNULL(Calculation_Basis, 'Gross') AS Calculation_Basis
                         FROM ESIConfiguration 
                         WHERE Is_Active = 1
                         ORDER BY Effective_Date DESC";
@@ -243,7 +244,8 @@ namespace OBMS.WebAPI.Controllers
                                     EffectiveDate = reader["Effective_Date"],
                                     IsActive = reader["Is_Active"],
                                     CreatedDate = reader["Created_Date"],
-                                    FinancialYear = reader["Financial_Year"]
+                                    FinancialYear = reader["Financial_Year"],
+                                    CalculationBasis = reader["Calculation_Basis"]
                                 });
                             }
                         }
@@ -266,6 +268,8 @@ namespace OBMS.WebAPI.Controllers
             public decimal EmployerContributionRate { get; set; }
             public string EffectiveDate { get; set; } = string.Empty;
             public bool IsActive { get; set; } = true;
+            /// <summary>"Gross" or "BasicDA"</summary>
+            public string CalculationBasis { get; set; } = "Gross";
         }
 
         [HttpPost("esi-configuration")]
@@ -287,9 +291,11 @@ namespace OBMS.WebAPI.Controllers
                     var query = @"
                         INSERT INTO ESIConfiguration 
                         (Gross_Salary_Limit, Employee_Rate, Employer_Rate,
-                         Effective_Date, Is_Active, Created_Date, Financial_Year)
+                         Effective_Date, Is_Active, Created_Date, Financial_Year,
+                         Calculation_Basis)
                         VALUES (@GrossSalaryLimit, @EmployeeRate, @EmployerRate,
-                                @EffectiveDate, @IsActive, GETDATE(), @FinancialYear)";
+                                @EffectiveDate, @IsActive, GETDATE(), @FinancialYear,
+                                @CalculationBasis)";
 
                     using (var command = new SqlCommand(query, connection))
                     {
@@ -299,6 +305,8 @@ namespace OBMS.WebAPI.Controllers
                         command.Parameters.AddWithValue("@EffectiveDate", effectiveDate);
                         command.Parameters.AddWithValue("@IsActive", esiConfig.IsActive);
                         command.Parameters.AddWithValue("@FinancialYear", financialYear);
+                        command.Parameters.AddWithValue("@CalculationBasis",
+                            string.IsNullOrWhiteSpace(esiConfig.CalculationBasis) ? "Gross" : esiConfig.CalculationBasis);
 
                         await command.ExecuteNonQueryAsync();
                     }
@@ -332,7 +340,8 @@ namespace OBMS.WebAPI.Controllers
                             Employee_Rate = @EmployeeRate,
                             Employer_Rate = @EmployerRate,
                             Effective_Date = @EffectiveDate,
-                            Is_Active = @IsActive
+                            Is_Active = @IsActive,
+                            Calculation_Basis = @CalculationBasis
                         WHERE Id = @Id";
 
                     using (var command = new SqlCommand(query, connection))
@@ -343,6 +352,8 @@ namespace OBMS.WebAPI.Controllers
                         command.Parameters.AddWithValue("@EmployerRate", esiConfig.EmployerContributionRate);
                         command.Parameters.AddWithValue("@EffectiveDate", effectiveDate);
                         command.Parameters.AddWithValue("@IsActive", esiConfig.IsActive);
+                        command.Parameters.AddWithValue("@CalculationBasis",
+                            string.IsNullOrWhiteSpace(esiConfig.CalculationBasis) ? "Gross" : esiConfig.CalculationBasis);
 
                         await command.ExecuteNonQueryAsync();
                     }

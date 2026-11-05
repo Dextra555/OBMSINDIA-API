@@ -70,7 +70,7 @@ namespace OBMS.WebAPI.Repositories.Interface
         #endregion
 
         #region RBI Bank Salary Export
-        List<BusinessObjects.RbiBankSalaryExport> GetRbiBankSalaryExportData(string dtSalaryPeriod, string branch, string employeeType);
+        List<BusinessObjects.RbiBankSalaryExport> GetRbiBankSalaryExportData(string dtSalaryPeriod, string branch, string employeeType, string client = "");
         List<BusinessObjects.RbiBankAdvanceExport> GetRbiBankAdvanceExportData(string dtSalaryPeriod, string branch, string employeeType);
         #endregion
 

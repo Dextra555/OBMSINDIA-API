@@ -10,18 +10,20 @@ namespace OBMS.WebAPI.Services
 
         /// <summary>
         /// Calculates employee PF contribution for Indian payroll.
-        /// Matches Crystal Report formula exactly:
-        ///   pfWage  = (basic + da + otherAllowances) / calendarDays * workedDays
-        ///   capped  = Min(pfWage, BasicSalaryLimit from PFConfiguration)
-        ///   pf      = Round(capped * EmployeeRate / 100, 0)
+        ///
+        /// Formula:
+        ///   pfWage = Basic + DA
+        ///   PF     = Round(pfWage × EmployeeRate / 100, 0)
+        ///
+        /// e.g. Basic=10,000 + DA=15,000 = 25,000 × 12% = 3,000
         /// </summary>
         /// <param name="basic">CB_Basic</param>
-        /// <param name="da">CB_DA</param>
-        /// <param name="otherAllowances">CB_OtherAllowances</param>
-        /// <param name="calendarDays">Total calendar days in the salary month</param>
-        /// <param name="workedDays">BasicSalaryDays (actual days worked)</param>
-        /// <param name="calculationDate">Salary period date (for config lookup)</param>
-        /// <returns>Tuple of (PF employee contribution, PFWage used)</returns>
+        /// <param name="da">CB_DA (Dearness Allowance — do NOT pass HRA here)</param>
+        /// <param name="otherAllowances">CB_OtherAllowances (not used in PF calc)</param>
+        /// <param name="calendarDays">Calendar days in month (not used in simple formula)</param>
+        /// <param name="workedDays">Worked days (not used in simple formula)</param>
+        /// <param name="calculationDate">Salary period date (for PFConfiguration lookup)</param>
+        /// <returns>Tuple of (PF employee contribution, PFWage = Basic+DA)</returns>
         (decimal PF, decimal PFWage) CalculatePFForPayslip(
             decimal basic,
             decimal da,

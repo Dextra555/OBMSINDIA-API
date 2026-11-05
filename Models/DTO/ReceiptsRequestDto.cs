@@ -30,5 +30,8 @@
         public string? LastUpdatedBy { get; set; }
 
         public ReceiptDetailRequestDto[]? details { get; set; }
+
+        // Client code — derived from the first detail row's Client field
+        public string? client { get; set; }
     }
 }

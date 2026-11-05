@@ -3681,7 +3681,8 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
 
 
-                    var pfResult = _pfCalculationService.CalculatePF(basicSalary, hra, periodDate);
+                    // PF: use DA (Dearness Allowance) as second param, not HRA
+                    var pfResult = _pfCalculationService.CalculatePF(basicSalary, da, periodDate);
 
                     var esiResult = _esiCalculationService.CalculateESI(grossSalary, periodDate);
 
@@ -3866,9 +3867,8 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     decimal grossSalary = basicSalary + hrAllowance;
 
-
-
-                    var pfResult = _pfCalculationService.CalculatePF(basicSalary, hrAllowance, periodDate);
+                    // PF is on Basic + DA only. Guards have no separate DA (HRA is excluded from PF base).
+                    var pfResult = _pfCalculationService.CalculatePF(basicSalary, 0m, periodDate);
 
                     var esiResult = _esiCalculationService.CalculateESI(grossSalary, periodDate);
 
@@ -3989,9 +3989,8 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     decimal grossSalary = basicSalary + hrAllowance + overtime;
 
-
-
-                    var pfResult = _pfCalculationService.CalculatePF(basicSalary, hrAllowance, periodDate);
+                    // PF is on Basic + DA only. Guards have no separate DA (HRA is excluded from PF base).
+                    var pfResult = _pfCalculationService.CalculatePF(basicSalary, 0m, periodDate);
 
                     var esiResult = _esiCalculationService.CalculateESI(grossSalary, periodDate);
 
@@ -4106,17 +4105,17 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                 {
 
-                    decimal basicSalary = rbaData.attendance.AllowanceDeduction > 0 ? rbaData.attendance.AllowanceDeduction : 16000;
+                    // Use CB (Commercial Breakdown) fields from Employee table — same as other payslip methods.
+                    // Previously hardcoded: basicSalary=16000, hrAllowance=3200, specialAllowance=1500 — now DB-driven.
+                    decimal basicSalary = rbaData.emp.CB_Basic ?? (rbaData.attendance.AllowanceDeduction > 0 ? rbaData.attendance.AllowanceDeduction : (decimal)rbaData.empDetail.EMPPAY_BASIC_RATE);
+                    decimal da = rbaData.emp.CB_DA ?? 0m;
+                    decimal hrAllowance = rbaData.emp.CB_HRA ?? rbaData.empDetail.ATTENDANCEALLOWANCE ?? 0m;
+                    decimal specialAllowance = rbaData.emp.CB_OtherAllowances ?? (decimal?)rbaData.empDetail.SpecialAllowance ?? 0m;
 
-                    decimal hrAllowance = rbaData.attendance.Shift2Rate > 0 ? rbaData.attendance.Shift2Rate : 3200;
+                    decimal grossSalary = basicSalary + da + hrAllowance + specialAllowance;
 
-                    decimal specialAllowance = 1500;
-
-                    decimal grossSalary = basicSalary + hrAllowance + specialAllowance;
-
-
-
-                    var pfResult = _pfCalculationService.CalculatePF(basicSalary, hrAllowance, periodDate);
+                    // PF is on Basic + DA only — HRA and other allowances are excluded from PF base
+                    var pfResult = _pfCalculationService.CalculatePF(basicSalary, da, periodDate);
 
                     var esiResult = _esiCalculationService.CalculateESI(grossSalary, periodDate);
 
@@ -4158,6 +4157,8 @@ namespace OBMS.WebAPI.Repositories.Implementation
                         presentDays = rbaTotalWorkingDays,
 
                         basicSalary = Math.Round(basicSalary, 2),
+
+                        da = Math.Round(da, 2),
 
                         hrAllowance = Math.Round(hrAllowance, 2),
 
@@ -4205,7 +4206,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
         #region RBI Bank Salary Export
 
-        public List<RbiBankSalaryExport> GetRbiBankSalaryExportData(string dtSalaryPeriod, string branch, string employeeType)
+        public List<RbiBankSalaryExport> GetRbiBankSalaryExportData(string dtSalaryPeriod, string branch, string employeeType, string client = "")
 
         {
 
@@ -4213,7 +4214,7 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
             {
 
-                var businessData = RbiBankSalaryExport.GetRbiBankSalaryExportData(dtSalaryPeriod, branch, employeeType);
+                var businessData = RbiBankSalaryExport.GetRbiBankSalaryExportData(dtSalaryPeriod, branch, employeeType, client);
 
                 return businessData;
 

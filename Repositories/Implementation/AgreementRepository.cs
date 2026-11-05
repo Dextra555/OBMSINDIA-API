@@ -127,17 +127,36 @@ namespace OBMS.WebAPI.Repositories.Implementation
             return results;
         }
 
-        public async Task<List<Object>> GetAgreements(string branchId)
+        public async Task<List<Object>> GetAgreements(string branchId, string userName = "")
         {
+            bool isSuperAdmin = string.Equals(userName?.Trim(), "superadmin", StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(userName?.Trim(), "admin", StringComparison.OrdinalIgnoreCase)
+                                || string.IsNullOrEmpty(userName);
 
             if (branchId == "0")
             {
+                // Get the allowed branch codes for this user
+                List<string> allowedBranchCodes;
+                if (isSuperAdmin)
+                {
+                    allowedBranchCodes = await _oBMSDbContext.BranchMasters
+                        .Select(b => b.Code)
+                        .ToListAsync();
+                }
+                else
+                {
+                    allowedBranchCodes = await _oBMSDbContext.OBMSBranches
+                        .Where(ob => ob.Name == userName && ob.IsAllowed == true)
+                        .Select(ob => ob.BranchCode)
+                        .ToListAsync();
+                }
 
                 var query = from t in _oBMSDbContext.Agreements
                             join client in _oBMSDbContext.ClientMasters on t.Client equals client.Code
                             join branch in _oBMSDbContext.BranchMasters on
                             t.Branch equals branch.Code
                             where (t.IsValid == true || t.IsValid == null)
+                               && allowedBranchCodes.Contains(t.Branch)
                             select new
                             {
                                 ID = t.ID,

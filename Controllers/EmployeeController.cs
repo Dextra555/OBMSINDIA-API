@@ -278,6 +278,21 @@ namespace OBMS.WebAPI.Controllers
             {
                 Dictionary<string, object> dictResult = new Dictionary<string, object>();
 
+                // Validate Basic Salary and DA — both must be greater than 0
+                if (!employeeRequestDto.CB_Basic.HasValue || employeeRequestDto.CB_Basic <= 0)
+                {
+                    dictResult.Add("Success", "Warning");
+                    dictResult.Add("Message", "Basic Salary is mandatory. Please enter an amount greater than 0.");
+                    return Ok(dictResult);
+                }
+
+                if (!employeeRequestDto.CB_DA.HasValue || employeeRequestDto.CB_DA <= 0)
+                {
+                    dictResult.Add("Success", "Warning");
+                    dictResult.Add("Message", "Dearness Allowance (DA) is mandatory. Please enter an amount greater than 0.");
+                    return Ok(dictResult);
+                }
+
                 // Validate Indian compliance fields for new employees
                 // Aadhaar number is now optional
 

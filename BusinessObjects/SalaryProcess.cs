@@ -3495,13 +3495,18 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 {
                                                     try
                                                     {
+                                                        // PF = (Basic + DA) / CalendarDays × WorkedDays × 12%
+                                                        // Prorated by Total Working Days (BasicSalaryDays)
+                                                        // e.g. Basic=6680, DA=7353, Days=30/31
+                                                        //   PFWage = 14033/31 × 30 = 13,580.32
+                                                        //   PF = Round(13580.32 × 12%) = 1,630
                                                         int pfCalendarDays = DateTime.DaysInMonth(Period.Year, Period.Month);
                                                         (dPF, dPFWage) = _pfCalculationService.CalculatePFForPayslip(
                                                             dCB_Basic,
                                                             dCB_DA,
-                                                            dCB_OtherAllowances,
-                                                            pfCalendarDays,
-                                                            BasicSalaryDays,
+                                                            0,                  // otherAllowances excluded from PF
+                                                            pfCalendarDays,     // actual calendar days in month
+                                                            BasicSalaryDays,    // Total Working Days (worked days)
                                                             Period);
                                                     }
                                                     catch
@@ -3522,10 +3527,11 @@ namespace OBMS.WebAPI.BusinessObjects
                                             //   AND ( ClientComplianceStatus = "compliance_client"
                                             //         OR EMP_ROLE = "Staff" )
                                             //
-                                            // Wage:
-                                            //   esiWage = EarnedSalary − CB_AdvanceStatutoryBonus
-                                            //   if esiWage < BasicSalaryLimit (₹21,000 from ESIConfiguration)
-                                            //       ESI = Round(esiWage × EmployeeRate / 100, 0)  [0.75%]
+                                            // Wage (basis from ESIConfiguration.CalculationBasis):
+                                            //   "Gross"   → ESI Wage = EarnedSalary − CB_AdvanceStatutoryBonus
+                                            //   "BasicDA" → ESI Wage = CB_Basic + CB_DA
+                                            //   if ESI Wage < BasicSalaryLimit (₹21,000)
+                                            //       ESI = Round(ESI Wage × EmployeeRate / 100, 0)  [0.75%]
                                             //   else ESI = 0
                                             dESI = 0;
                                             dESIWage = 0;
@@ -3539,9 +3545,16 @@ namespace OBMS.WebAPI.BusinessObjects
                                                 {
                                                     try
                                                     {
+                                                        // ESI = (Basic + DA) / CalendarDays × WorkedDays × 0.75%
+                                                        // Prorated by Total Working Days (BasicSalaryDays)
+                                                        int esiCalendarDays = DateTime.DaysInMonth(Period.Year, Period.Month);
                                                         (dESI, dESIWage) = _esiCalculationService.CalculateESIForPayslip(
                                                             dEarnedSalary,
                                                             dCB_AdvanceStatutoryBonus,
+                                                            dCB_Basic,
+                                                            dCB_DA,
+                                                            esiCalendarDays,    // actual calendar days in month
+                                                            BasicSalaryDays,    // Total Working Days
                                                             Period);
                                                     }
                                                     catch

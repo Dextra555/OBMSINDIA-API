@@ -354,7 +354,7 @@ namespace OBMS.WebAPI.Controllers
 
                 Dictionary<string, object> dictResult = new Dictionary<string, object>();
 
-                var objList = await _agreementRepository.GetAgreements(branchId);
+                var objList = await _agreementRepository.GetAgreements(branchId, userID);
 
                 dictResult.Add("agreements", objList);
 
