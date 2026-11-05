@@ -4,7 +4,12 @@ namespace OBMS.WebAPI.Services
 {
     public interface ITDSCalculationService
     {
+        /// <summary>Primary method: pass monthly gross + period month for correct FY-remaining-months TDS.</summary>
+        TDSCalculationResult CalculateTDS(decimal grossMonthlyIncome, int periodMonth, int ageGroup = 1);
+
+        /// <summary>Legacy overload: treats annualIncome as full-year (period = March).</summary>
         TDSCalculationResult CalculateTDS(decimal annualIncome, int ageGroup = 1);
+
         decimal GetTDSDeduction(decimal annualIncome, int ageGroup = 1);
     }
 

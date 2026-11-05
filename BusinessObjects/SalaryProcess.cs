@@ -3599,20 +3599,56 @@ namespace OBMS.WebAPI.BusinessObjects
                                             decimal dMonthLeave = Math.Round(dGrossPay - dEarnedSalary, 2);
                                             if (dMonthLeave < 0) dMonthLeave = 0; // safety: never negative
 
-                                            // ── TDS Calculation ──────────────────────────────────────────────────
+                                            // ── TDS Calculation (India Act FY 2026-27 New Regime) ────────────────
                                             // Only calculate when Employee.TDSApplicable = true
+                                            // Logic (India Act correct):
+                                            //   1. Remaining FY months = from EMPLOYEE JOIN MONTH to March (inclusive)
+                                            //      Indian FY: April(4) to March(3).
+                                            //      Formula: ((3 - joinMonth + 12) % 12) + 1
+                                            //      Sep=7, Oct=6, Nov=5, Dec=4, Jan=3, Feb=2, Mar=1, Apr=12 etc.
+                                            //      This is FIXED for the entire FY — same basis every month.
+                                            //      Example: Employee joins Sep 2026 → 7 months (Sep–Mar) every period.
+                                            //   2. Projected income = dGrossPay * remainingFYMonths
+                                            //   3. Standard deduction ₹75,000 (New Regime, Budget 2024)
+                                            //   4. New Regime: NO age-based basic exemption (0% slab in DB covers ₹4L)
+                                            //   5. Slabs fetched from TDSSlabConfiguration (Is_Active=1) — 2026-27 New Regime
+                                            //   6. 4% Health & Education Cess on tax
+                                            //   7. Monthly TDS = totalFYTax / remainingFYMonths
                                             dTDS = 0;
                                             if (bTDSApplicable)
                                             {
-                                                decimal annualIncome = dGrossPay * 12;
-                                                decimal basicExemption = 250000m; // Age group 1 (below 60) default
-                                                if (EmployeeAge >= 80) basicExemption = 500000m;
-                                                else if (EmployeeAge >= 60) basicExemption = 300000m;
+                                                // Step 1: Get employee join month from EMPPAY_DATE_JOINED (already in drEmployee)
+                                                DateTime empJoinDate = drEmployee.IsDBNull(drEmployee.GetOrdinal("EMPPAY_DATE_JOINED"))
+                                                    ? new DateTime(Period.Year, 4, 1)  // fallback: April (start of FY)
+                                                    : drEmployee.GetDateTime(drEmployee.GetOrdinal("EMPPAY_DATE_JOINED"));
 
-                                                decimal taxableIncome = Math.Max(0, annualIncome - basicExemption);
+                                                // Determine FY start month: if joined before April of current FY, use April (full year)
+                                                // FY of current period: April of same year if Period.Month >= 4, else April of previous year
+                                                int fyStartYear = (Period.Month >= 4) ? Period.Year : Period.Year - 1;
+                                                DateTime fyStart = new DateTime(fyStartYear, 4, 1);
+
+                                                // Use join month if joined in this FY, otherwise use April (full FY basis)
+                                                int tdsStartMonth = (empJoinDate >= fyStart)
+                                                    ? empJoinDate.Month   // mid-year joiner — use actual join month
+                                                    : 4;                  // existing employee — April start
+
+                                                // Remaining FY months from tdsStartMonth to March (inclusive) — fixed for whole FY
+                                                int remainingFYMonths = ((3 - tdsStartMonth + 12) % 12) + 1;
+                                                // Sep=7, Oct=6, Nov=5, Dec=4, Jan=3, Feb=2, Mar=1, Apr=12
+
+                                                // Step 2: Projected income for remaining FY months
+                                                decimal projectedAnnualIncome = dGrossPay * remainingFYMonths;
+
+                                                // Step 3: Standard deduction (New Regime ₹75,000 — prorated if < 12 months)
+                                                decimal standardDeduction = Math.Min(75000m, projectedAnnualIncome);
+
+                                                // Step 4: Taxable income (New Regime — no separate age-based exemption;
+                                                //          first slab 0% in DB covers ₹4,00,000)
+                                                decimal taxableIncome = Math.Max(0, projectedAnnualIncome - standardDeduction);
+
                                                 if (taxableIncome > 0)
                                                 {
-                                                    // Fetch slabs from DB inline
+                                                    // Step 5: Fetch active slabs from DB (2026-27 New Regime)
                                                     decimal annualTax = 0;
                                                     SqlCommand cmdTDS = new SqlCommand(
                                                         "SELECT Min_Income, Max_Income, Tax_Rate FROM TDSSlabConfiguration WHERE Is_Active = 1 ORDER BY Min_Income");
@@ -3633,9 +3669,10 @@ namespace OBMS.WebAPI.BusinessObjects
                                                             remaining -= slabIncome;
                                                         }
                                                     }
-                                                    // 4% Education Cess
+                                                    // Step 6: 4% Health & Education Cess
                                                     annualTax = annualTax * 1.04m;
-                                                    dTDS = Math.Round(annualTax / 12m, 2);
+                                                    // Step 7: Monthly TDS = total FY tax / remaining months
+                                                    dTDS = Math.Round(annualTax / remainingFYMonths, 2);
                                                 }
                                             }
                                             // ─────────────────────────────────────────────────────────────────────

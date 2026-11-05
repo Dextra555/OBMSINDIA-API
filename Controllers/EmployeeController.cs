@@ -286,10 +286,10 @@ namespace OBMS.WebAPI.Controllers
                     return Ok(dictResult);
                 }
 
-                if (!employeeRequestDto.CB_DA.HasValue || employeeRequestDto.CB_DA <= 0)
+                if (!employeeRequestDto.CB_DA.HasValue || employeeRequestDto.CB_DA < 0)
                 {
                     dictResult.Add("Success", "Warning");
-                    dictResult.Add("Message", "Dearness Allowance (DA) is mandatory. Please enter an amount greater than 0.");
+                    dictResult.Add("Message", "Dearness Allowance (DA) cannot be negative.");
                     return Ok(dictResult);
                 }
 

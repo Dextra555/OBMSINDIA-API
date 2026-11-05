@@ -75,27 +75,23 @@ namespace OBMS.WebAPI.Services
             result.EmployeeContributionRate = pfConfig.EmployeeRate;
             result.EmployerContributionRate = pfConfig.EmployerRate;
 
-            // PF Wage = Basic + DA  (API method — full month, no days context)
-            // Cap at BasicSalaryLimit from PFConfiguration (e.g. ₹25,000)
-            // Basic+DA=24,000 → pfSalary=24,000  (below limit, no cap)
-            // Basic+DA=26,000 → pfSalary=25,000  (above limit, capped)
-            // Basic+DA=35,000 → pfSalary=25,000  (above limit, capped)
-            decimal pfSalary = result.TotalWages > pfConfig.BasicSalaryLimit
-                ? pfConfig.BasicSalaryLimit
-                : result.TotalWages;
-            result.PFSalary    = pfSalary;
+            // PF Wage = Min(Basic + DA, BasicSalaryLimit)
+            // BasicSalaryLimit = ₹25,000 from PFConfiguration (Effective 01-Oct-2026)
+            // e.g. Basic+DA=24,000 → pfSalary=24,000  → PF=24,000×12%=2,880
+            //      Basic+DA=26,000 → pfSalary=25,000  → PF=25,000×12%=3,000 (capped)
+            //      Basic+DA=35,000 → pfSalary=25,000  → PF=25,000×12%=3,000 (capped)
+            decimal pfSalary = Math.Min(result.TotalWages, pfConfig.BasicSalaryLimit);
+            result.PFSalary      = pfSalary;
             result.PensionSalary = pfSalary;
-            result.EDLISalary  = pfSalary;
+            result.EDLISalary    = pfSalary;
 
             if (result.IsPFApplicable && !isAbove55)
             {
-                // Employee PF = (Basic + DA) × EmployeeRate%
-                // e.g. (10,000 + 15,000) × 12% = 3,000
+                // Employee PF = Min(Basic+DA, BasicSalaryLimit) × EmployeeRate%
                 decimal epf = pfSalary * pfConfig.EmployeeRate / 100m;
                 result.EPF = Math.Round(epf, 0, MidpointRounding.AwayFromZero);
 
-                // Employer PF = (Basic + DA) × EmployerRate%
-                // e.g. (10,000 + 15,000) × 13% = 3,250
+                // Employer PF = Min(Basic+DA, BasicSalaryLimit) × EmployerRate%
                 decimal employerPF = pfSalary * pfConfig.EmployerRate / 100m;
                 result.EPS     = Math.Round(employerPF, 0, MidpointRounding.AwayFromZero);
                 result.Balance = 0;
@@ -142,18 +138,23 @@ namespace OBMS.WebAPI.Services
         // ── Helpers ──────────────────────────────────────────────────────────────
 
         /// <summary>
-        /// Calculates employee PF for Indian payroll with Working Days proration + BasicSalaryLimit cap.
+        /// Calculates employee PF for Indian payroll (Salary Processing).
         ///
         /// Formula:
-        ///   Step 1: pfWage  = (Basic + DA) / CalendarDays × WorkedDays   (prorate)
-        ///   Step 2: pfWage  = Min(pfWage, BasicSalaryLimit)               (cap at ₹25,000)
-        ///   Step 3: PF      = Round(pfWage × EmployeeRate / 100, 0)      (12%)
+        ///   Step 1: pfWage    = (Basic + DA) / CalendarDays × WorkedDays  ← prorate by worked days
+        ///   Step 2: pfCapped  = Min(pfWage, BasicSalaryLimit)              ← cap at ₹25,000 (from DB)
+        ///   Step 3: PF        = Round(pfCapped × EmployeeRate / 100, 0)   ← 12% from DB
         ///
-        /// Examples:
-        ///   Basic+DA=24,000, WD=31/31 → pfWage=24,000 → PF=Round(24000×12%)=2,880
-        ///   Basic+DA=26,000, WD=31/31 → pfWage=25,000 (capped) → PF=Round(25000×12%)=3,000
-        ///   Basic+DA=35,000, WD=31/31 → pfWage=25,000 (capped) → PF=Round(25000×12%)=3,000
-        ///   Basic+DA=14,033, WD=30/31 → pfWage=13,580 → PF=Round(13580×12%)=1,630
+        /// Examples (CalDays=31, WorkedDays=31 full month):
+        ///   Basic+DA = 24,000 → pfWage=24,000 → capped=24,000 → PF = 24,000×12% = 2,880
+        ///   Basic+DA = 26,000 → pfWage=26,000 → capped=25,000 → PF = 25,000×12% = 3,000
+        ///   Basic+DA = 35,000 → pfWage=35,000 → capped=25,000 → PF = 25,000×12% = 3,000
+        ///
+        /// Examples (CalDays=31, WorkedDays=30):
+        ///   Basic+DA = 24,000 → pfWage=24,000/31×30=23,226 → capped=23,226 → PF=23,226×12%=2,787
+        ///   Basic+DA = 26,000 → pfWage=26,000/31×30=25,161 → capped=25,000 → PF=25,000×12%=3,000
+        ///
+        /// BasicSalaryLimit and EmployeeRate read from active PFConfiguration in DB.
         /// </summary>
         public (decimal PF, decimal PFWage) CalculatePFForPayslip(
             decimal basic,
@@ -167,25 +168,21 @@ namespace OBMS.WebAPI.Services
             if (pfConfig == null)
                 return (0m, 0m);
 
-            // Step 1 — Prorate by worked days
-            // PF is only on Basic + DA (otherAllowances excluded per EPF rules)
+            // Step 1 — Prorate Basic+DA by worked days
             decimal totalBD = basic + da;
             decimal pfWage = calendarDays > 0
                 ? Math.Round(totalBD / calendarDays * workedDays, 2)
                 : totalBD;
 
-            // Step 2 — Cap at BasicSalaryLimit from PFConfiguration DB (e.g. ₹25,000)
-            // Basic+DA=24,000 → pfWage=24,000  (below limit, no cap)
-            // Basic+DA=26,000 → pfWage=25,000  (above limit, capped)
-            // Basic+DA=35,000 → pfWage=25,000  (above limit, capped)
-            if (pfWage > pfConfig.BasicSalaryLimit)
-                pfWage = pfConfig.BasicSalaryLimit;
+            // Step 2 — Cap at BasicSalaryLimit from PFConfiguration (e.g. ₹25,000)
+            decimal pfCapped = pfWage > pfConfig.BasicSalaryLimit
+                ? pfConfig.BasicSalaryLimit
+                : pfWage;
 
-            // Step 3 — Employee PF = pfWage × EmployeeRate%
-            // AwayFromZero matches Crystal Report Round() behaviour
-            decimal pf = Math.Round(pfWage * pfConfig.EmployeeRate / 100m, 0, MidpointRounding.AwayFromZero);
+            // Step 3 — Employee PF = pfCapped × EmployeeRate%
+            decimal pf = Math.Round(pfCapped * pfConfig.EmployeeRate / 100m, 0, MidpointRounding.AwayFromZero);
 
-            return (pf, pfWage);
+            return (pf, pfCapped);
         }
 
         private PFConfiguration GetActivePFConfiguration(DateTime calculationDate)
