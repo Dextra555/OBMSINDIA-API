@@ -13,66 +13,58 @@ namespace OBMS.WebAPI.Services
         }
 
         /// <summary>
-        /// Calculate TDS per India Act FY 2026-27 New Regime.
+        /// Phase 2 primary computation: monthly gross + period month.
+        /// Uses the FY/Regime derived from the period date (New Regime by default),
+        /// full-FY eligible months (joining date not supplied), no previous-employer
+        /// income and no YTD. Backwards compatible with existing callers.
         /// </summary>
-        /// <param name="grossMonthlyIncome">Employee gross pay for the current month.</param>
-        /// <param name="periodMonth">Calendar month of the salary period (1=Jan … 12=Dec).</param>
-        /// <param name="ageGroup">Retained for signature compatibility; not used under New Regime.</param>
         public TDSCalculationResult CalculateTDS(decimal grossMonthlyIncome, int periodMonth, int ageGroup = 1)
         {
-            // ── Step 1: Remaining FY months (Indian FY: Apr–Mar) ─────────────
-            // Apr=12, May=11, Jun=10, Jul=9, Aug=8, Sep=7, Oct=6, Nov=5,
-            // Dec=4,  Jan=3,  Feb=2,  Mar=1
-            int remainingFYMonths = ((3 - periodMonth + 12) % 12) + 1;
+            // Derive FY from the current month. periodMonth alone doesn't give the year,
+            // so use today's date for the FY (the payslip path supplies the full input).
+            int fyStart = TdsTaxMath.FinancialYearStart(DateTime.Now);
 
-            // ── Step 2: Projected income for remaining FY months ─────────────
-            decimal projectedAnnualIncome = grossMonthlyIncome * remainingFYMonths;
-
-            var result = new TDSCalculationResult
+            var input = new TDSComputationInput
             {
-                AnnualIncome = projectedAnnualIncome,
+                GrossMonthlyIncome = grossMonthlyIncome,
+                PeriodMonth = periodMonth,
+                PeriodYear = DateTime.Now.Year,
+                FinancialYearStart = fyStart,
+                Regime = "New",
                 AgeGroup = ageGroup
             };
-
-            // ── Step 3: Standard deduction ₹75,000 (New Regime, Budget 2024) ─
-            decimal standardDeduction = Math.Min(75000m, projectedAnnualIncome);
-
-            // ── Step 4: Taxable income (New Regime — 0% slab in DB covers 4L) ─
-            result.TaxableIncome = Math.Max(0, projectedAnnualIncome - standardDeduction);
-            result.IsApplicable = result.TaxableIncome > 0;
-
-            if (result.IsApplicable)
-            {
-                // ── Step 5: Slab tax (active slabs = 2026-27 New Regime from DB) ─
-                var taxSlabs = GetActiveTDSSlabs();
-                result.TaxAmount = CalculateTaxBySlabs(result.TaxableIncome, taxSlabs, result.SlabDetails);
-
-                // ── Step 6: No surcharge for typical salary income ────────────
-                result.Surcharge = 0;
-
-                // ── Step 7: 4% Health & Education Cess ───────────────────────
-                result.EducationCess = result.TaxAmount * 4m / 100m;
-
-                result.TotalTax = result.TaxAmount + result.EducationCess;
-
-                // ── Step 8: Monthly TDS = FY tax / remaining months ───────────
-                result.MonthlyTDS = result.TotalTax / remainingFYMonths;
-            }
-            else
-            {
-                result.TaxAmount = 0;
-                result.Surcharge = 0;
-                result.EducationCess = 0;
-                result.TotalTax = 0;
-                result.MonthlyTDS = 0;
-            }
-
-            return result;
+            return CalculateTDS(input);
         }
 
-        /// <summary>Overload kept for callers that pass only annualIncome (assumes full year / March period).</summary>
+        /// <summary>Overload for annual income: projects over a full 12-month FY
+        /// (April → remainingFYMonths = 12) so projectedAnnualIncome = annualIncome and MonthlyTDS = annual tax ÷ 12.</summary>
         public TDSCalculationResult CalculateTDS(decimal annualIncome, int ageGroup = 1)
-            => CalculateTDS(annualIncome / 12m, 3, ageGroup); // treat as full-year: period=Mar → remainingMonths=1 ×12 = annualIncome
+            => CalculateTDS(annualIncome / 12m, 4, ageGroup); // April → remainingFYMonths=12 → projectedAnnual = annualIncome, MonthlyTDS = annualTax/12
+
+        /// <summary>
+        /// Phase 2 full computation. The single entry point used by the payroll engine
+        /// and the TDS computation/preview API. All tax values are read from the database
+        /// for the requested Financial Year + Regime; nothing is hardcoded.
+        /// </summary>
+        public TDSCalculationResult CalculateTDS(TDSComputationInput input)
+        {
+            string regime = string.IsNullOrWhiteSpace(input.Regime) ? "New" : input.Regime;
+            string fyString = $"{input.FinancialYearStart}-{input.FinancialYearStart + 1}";
+
+            var slabs = GetSlabs(fyString, regime);
+            var fyConfig = BuildFYConfig(slabs, regime);
+
+            // No slabs configured for this FY/Regime → tax not applicable (safeguard).
+            if (slabs.Count == 0)
+                return new TDSCalculationResult
+                {
+                    FinancialYear = fyString,
+                    Regime = regime,
+                    IsApplicable = false
+                };
+
+            return TdsTaxMath.Compute(input, fyConfig, slabs);
+        }
 
         public decimal GetTDSDeduction(decimal annualIncome, int ageGroup = 1)
         {
@@ -80,82 +72,37 @@ namespace OBMS.WebAPI.Services
             return result.MonthlyTDS;
         }
 
-        // GetBasicExemptionLimit retained but not used under New Regime
-        // (the 0% slab in TDSSlabConfiguration covers the first ₹4,00,000)
-        private decimal GetBasicExemptionLimit(int ageGroup)
-        {
-            return ageGroup switch
-            {
-                1 => 250000, // Below 60 years (Old Regime — kept for reference)
-                2 => 300000,
-                3 => 500000,
-                _ => 250000
-            };
-        }
+        // ── Database access: slabs + FY/regime config (nothing hardcoded) ──
 
-        private decimal CalculateTaxBySlabs(decimal taxableIncome, List<TDSSlabConfiguration> slabs, List<TDSSlabDetail> slabDetails)
-        {
-            decimal totalTax = 0;
-            decimal remainingIncome = taxableIncome;
-
-            foreach (var slab in slabs.OrderBy(s => s.MinIncome))
-            {
-                if (remainingIncome <= 0) break;
-
-                decimal slabIncome = 0;
-                if (!slab.MaxIncome.HasValue)
-                {
-                    slabIncome = remainingIncome;
-                }
-                else
-                {
-                    decimal slabMaxIncome = slab.MaxIncome.Value - slab.MinIncome;
-                    slabIncome = Math.Min(remainingIncome, slabMaxIncome);
-                }
-
-                decimal slabTax = slabIncome * slab.TaxRate / 100;
-                totalTax += slabTax;
-
-                slabDetails.Add(new TDSSlabDetail
-                {
-                    MinIncome = slab.MinIncome,
-                    MaxIncome = slab.MaxIncome,
-                    TaxRate = slab.TaxRate,
-                    TaxableAmount = slabIncome,
-                    TaxAmount = slabTax
-                });
-
-                remainingIncome -= slabIncome;
-            }
-
-            return totalTax;
-        }
-
-        private decimal CalculateSurcharge(decimal annualIncome)
-        {
-            // Surcharge rates (example - can be configured)
-            if (annualIncome > 50000000) // 5 crore
-            {
-                return annualIncome * 15 / 100;
-            }
-            else if (annualIncome > 20000000) // 2 crore
-            {
-                return annualIncome * 25 / 100;
-            }
-            else if (annualIncome > 10000000) // 1 crore
-            {
-                return annualIncome * 10 / 100;
-            }
-            
-            return 0;
-        }
-
-        private List<TDSSlabConfiguration> GetActiveTDSSlabs()
+        private List<TDSSlabConfiguration> GetSlabs(string financialYear, string regime)
         {
             return _context.Set<TDSSlabConfiguration>()
-                .Where(c => c.IsActive)
+                .Where(c => c.IsActive
+                         && c.FinancialYear == financialYear
+                         && c.Regime == regime)
                 .OrderBy(c => c.MinIncome)
                 .ToList();
+        }
+
+        /// <summary>
+        /// Builds the FY + Regime config from the first slab row (denormalised columns:
+        /// Standard_Deduction, Rebate_Threshold, Rebate_Amount, Education_Cess_Rate).
+        /// Falls back to New-Regime-safe defaults if columns are null (legacy rows).
+        /// </summary>
+        private TDSFYConfig BuildFYConfig(List<TDSSlabConfiguration> slabs, string regime)
+        {
+            var first = slabs.FirstOrDefault();
+            if (first == null)
+                return new TDSFYConfig();
+
+            return new TDSFYConfig
+            {
+                StandardDeduction = first.StandardDeduction ?? 75000m,
+                RebateThreshold = first.RebateThreshold ?? 0m,
+                RebateAmount = first.RebateAmount ?? 0m,
+                EducationCessRate = first.EducationCessRate ?? 4m,
+                ApplyMarginalRelief = string.Equals(regime, "New", StringComparison.OrdinalIgnoreCase)
+            };
         }
     }
 }

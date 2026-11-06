@@ -4,6 +4,7 @@ using System.Data;
 using System.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using OBMS.WebAPI.Models;
+using OBMS.WebAPI.Services;
 
 namespace OBMS.WebAPI.Controllers
 {
@@ -13,11 +14,13 @@ namespace OBMS.WebAPI.Controllers
     {
         private readonly OBMSDbContext _context;
         private readonly IConfiguration _configuration;
+        private readonly ITDSCalculationService _tdsCalculationService;
 
-        public ReportController(OBMSDbContext context, IConfiguration configuration)
+        public ReportController(OBMSDbContext context, IConfiguration configuration, ITDSCalculationService tdsCalculationService)
         {
             _context = context;
             _configuration = configuration;
+            _tdsCalculationService = tdsCalculationService;
         }
 
         [HttpPost("GetReportData")]
@@ -104,8 +107,10 @@ namespace OBMS.WebAPI.Controllers
             // Professional Tax (varies by state)
             var professionalTax = GetProfessionalTaxByState(employee.IndianState ?? "Maharashtra");
 
-            // TDS Calculation (simplified)
-            var tdsDeducted = CalculateTDS(grossSalary - employeePF);
+            // TDS Calculation — uses the same TDSCalculationService as the payslip (Phase 2).
+            // DB-driven FY slabs, standard deduction, Section 87A rebate and 4% cess; no hardcoded rates.
+            var tdsResult = _tdsCalculationService.CalculateTDS((decimal)((grossSalary - employeePF) * 12));
+            var tdsDeducted = (double)Math.Round(tdsResult.MonthlyTDS, 2);
 
             var totalDeductions = employeePF + employeeESI + professionalTax + tdsDeducted;
             var netSalary = grossSalary - totalDeductions;

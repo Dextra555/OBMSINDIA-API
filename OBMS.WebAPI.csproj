@@ -26,6 +26,15 @@
     <Content Remove="publish_output\**" />
   </ItemGroup>
 
+  <!-- Exclude the nested unit-test project from this web project's compile globs
+       (the test project has its own .csproj under OBMS.WebAPI.Tests\). -->
+  <ItemGroup>
+    <Compile Remove="OBMS.WebAPI.Tests\**" />
+    <None Remove="OBMS.WebAPI.Tests\**" />
+    <Content Remove="OBMS.WebAPI.Tests\**" />
+    <EmbeddedResource Remove="OBMS.WebAPI.Tests\**" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="BoldReports.Net.Core" Version="5.3.10" />
     <PackageReference Include="ClosedXML" Version="0.105.0" />

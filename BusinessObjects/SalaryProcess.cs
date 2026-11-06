@@ -3648,10 +3648,19 @@ namespace OBMS.WebAPI.BusinessObjects
 
                                                 if (taxableIncome > 0)
                                                 {
-                                                    // Step 5: Fetch active slabs from DB (2026-27 New Regime)
+                                                    // Step 5: Fetch active slabs from DB for current FY + New Regime
+                                                    // IMPORTANT: Filter by Financial_Year AND Regime to avoid mixing slabs
+                                                    // from different FYs (FY 2024-25 + FY 2026-27 are both active).
+                                                    string fyString = $"{fyStartYear}-{fyStartYear + 1}";
                                                     decimal annualTax = 0;
                                                     SqlCommand cmdTDS = new SqlCommand(
-                                                        "SELECT Min_Income, Max_Income, Tax_Rate FROM TDSSlabConfiguration WHERE Is_Active = 1 ORDER BY Min_Income");
+                                                        @"SELECT Min_Income, Max_Income, Tax_Rate
+                                                          FROM TDSSlabConfiguration
+                                                          WHERE Is_Active = 1
+                                                            AND Financial_Year = @FinancialYear
+                                                            AND Regime = 'New'
+                                                          ORDER BY Min_Income");
+                                                    cmdTDS.Parameters.AddWithValue("@FinancialYear", fyString);
                                                     using (SQLDataAccess sdaTDS = new SQLDataAccess(_configuration))
                                                     using (SqlDataReader drTDS = sdaTDS.RetrieveData(cmdTDS))
                                                     {

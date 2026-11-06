@@ -3955,6 +3955,22 @@ var sqlQuery = @"
 
         }
 
+        [HttpGet("GetEmployeeTDSComputation")]
+        public async Task<IActionResult> GetEmployeeTDSComputation(int employeeId, decimal monthlyGross, string period)
+        {
+            try
+            {
+                if (!DateTime.TryParseExact(period, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out DateTime periodDate))
+                    periodDate = DateTime.Now;
+                var result = await _payrollRepository.GetEmployeeTDSComputationAsync(employeeId, monthlyGross, periodDate);
+                return Ok(result);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Internal server error", message = ex.Message });
+            }
+        }
+
         #endregion
 
         // Helper method - reverse of UI getWorkTypeByName

@@ -7,8 +7,11 @@ namespace OBMS.WebAPI.Services
         /// <summary>Primary method: pass monthly gross + period month for correct FY-remaining-months TDS.</summary>
         TDSCalculationResult CalculateTDS(decimal grossMonthlyIncome, int periodMonth, int ageGroup = 1);
 
-        /// <summary>Legacy overload: treats annualIncome as full-year (period = March).</summary>
+        /// <summary>Overload for annual income: projects over a full 12-month FY, returns monthly TDS = annual tax ÷ 12.</summary>
         TDSCalculationResult CalculateTDS(decimal annualIncome, int ageGroup = 1);
+
+        /// <summary>Phase 2: full computation with joining date, FY, regime, previous-employer income/TDS and YTD.</summary>
+        TDSCalculationResult CalculateTDS(TDSComputationInput input);
 
         decimal GetTDSDeduction(decimal annualIncome, int ageGroup = 1);
     }
@@ -25,6 +28,18 @@ namespace OBMS.WebAPI.Services
         public decimal MonthlyTDS { get; set; }
         public bool IsApplicable { get; set; }
         public List<TDSSlabDetail> SlabDetails { get; set; } = new List<TDSSlabDetail>();
+
+        // ── Phase 2: computation metadata for payslip / auditor statement ──
+        public string FinancialYear { get; set; } = string.Empty;
+        public string Regime { get; set; } = "New";
+        public decimal StandardDeduction { get; set; }
+        public decimal RebateAmount { get; set; }
+        public decimal BalanceTax { get; set; }
+        public int EligibleSalaryMonths { get; set; }
+        public int RemainingDeductionMonths { get; set; }
+        public decimal PreviousEmployerIncome { get; set; }
+        public decimal PreviousEmployerTDS { get; set; }
+        public decimal YtdTDS { get; set; }
     }
 
     public class TDSSlabDetail

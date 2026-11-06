@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using OBMS.WebAPI.Services;
 using OBMS.WebAPI.Models.Domain;
 using OBMS.WebAPI.Models;
+using Microsoft.EntityFrameworkCore;
 
 namespace OBMS.WebAPI.Controllers
 {
@@ -606,26 +607,36 @@ namespace OBMS.WebAPI.Controllers
         #region TDS Configuration
 
         [HttpGet("tds-configuration")]
-        public async Task<IActionResult> GetTDSConfiguration()
+        public async Task<IActionResult> GetTDSConfiguration([FromQuery] string? financialYear = null, [FromQuery] string? regime = null)
         {
             try
             {
                 var tdsConfigurations = new List<object>();
-                
+
                 using (var connection = new SqlConnection(_connectionString))
                 {
                     await connection.OpenAsync();
-                    
+
                     var query = @"
-                        SELECT Id, Financial_Year, Min_Income, Max_Income, Tax_Rate, 
+                        SELECT Id, Financial_Year, Min_Income, Max_Income, Tax_Rate,
                                Surcharge_Rate, Education_Cess_Rate, Higher_Education_Cess_Rate,
-                               Is_Active, Created_Date
-                        FROM TDSSlabConfiguration 
-                        WHERE Is_Active = 1
-                        ORDER BY Min_Income";
+                               Is_Active, Created_Date,
+                               Regime, Standard_Deduction, Rebate_Threshold, Rebate_Amount, Effective_Date
+                        FROM TDSSlabConfiguration
+                        WHERE Is_Active = 1";
+
+                    if (!string.IsNullOrWhiteSpace(financialYear))
+                        query += " AND Financial_Year = @FinancialYear";
+                    if (!string.IsNullOrWhiteSpace(regime))
+                        query += " AND Regime = @Regime";
+                    query += " ORDER BY Financial_Year, Regime, Min_Income";
 
                     using (var command = new SqlCommand(query, connection))
                     {
+                        if (!string.IsNullOrWhiteSpace(financialYear))
+                            command.Parameters.AddWithValue("@FinancialYear", financialYear);
+                        if (!string.IsNullOrWhiteSpace(regime))
+                            command.Parameters.AddWithValue("@Regime", regime);
                         using (var reader = await command.ExecuteReaderAsync())
                         {
                             while (await reader.ReadAsync())
@@ -641,7 +652,12 @@ namespace OBMS.WebAPI.Controllers
                                     EducationCessRate = reader["Education_Cess_Rate"] != DBNull.Value ? reader["Education_Cess_Rate"] : null,
                                     HigherEducationCessRate = reader["Higher_Education_Cess_Rate"] != DBNull.Value ? reader["Higher_Education_Cess_Rate"] : null,
                                     IsActive = reader["Is_Active"],
-                                    CreatedDate = reader["Created_Date"]
+                                    CreatedDate = reader["Created_Date"],
+                                    Regime = reader["Regime"],
+                                    StandardDeduction = reader["Standard_Deduction"] != DBNull.Value ? reader["Standard_Deduction"] : null,
+                                    RebateThreshold = reader["Rebate_Threshold"] != DBNull.Value ? reader["Rebate_Threshold"] : null,
+                                    RebateAmount = reader["Rebate_Amount"] != DBNull.Value ? reader["Rebate_Amount"] : null,
+                                    EffectiveDate = reader["Effective_Date"] != DBNull.Value ? reader["Effective_Date"] : null
                                 });
                             }
                         }
@@ -666,6 +682,7 @@ namespace OBMS.WebAPI.Controllers
                     id = idProp.GetInt32();
 
                 string financialYear = tdsConfig.TryGetProperty("financialYear", out var fyProp) ? fyProp.GetString() ?? "2024-2025" : "2024-2025";
+                string regime        = tdsConfig.TryGetProperty("regime", out var regimeProp) ? (regimeProp.GetString() ?? "New") : "New";
                 decimal minIncome   = tdsConfig.TryGetProperty("minIncome", out var minProp) ? minProp.GetDecimal() : 0m;
                 decimal? maxIncome  = (tdsConfig.TryGetProperty("maxIncome", out var maxProp) && maxProp.ValueKind != System.Text.Json.JsonValueKind.Null)
                                         ? maxProp.GetDecimal() : (decimal?)null;
@@ -673,6 +690,14 @@ namespace OBMS.WebAPI.Controllers
                 decimal surchRate   = tdsConfig.TryGetProperty("surchargeRate", out var surProp) ? surProp.GetDecimal() : 0m;
                 decimal eduCess     = tdsConfig.TryGetProperty("educationCessRate", out var eduProp) ? eduProp.GetDecimal() : 4m;
                 decimal higherCess  = tdsConfig.TryGetProperty("higherEducationCessRate", out var higherProp) ? higherProp.GetDecimal() : 0m;
+                decimal? stdDeduction = tdsConfig.TryGetProperty("standardDeduction", out var stdProp) && stdProp.ValueKind != System.Text.Json.JsonValueKind.Null ? stdProp.GetDecimal() : (decimal?)null;
+                decimal? rebateThreshold = tdsConfig.TryGetProperty("rebateThreshold", out var rtProp) && rtProp.ValueKind != System.Text.Json.JsonValueKind.Null ? rtProp.GetDecimal() : (decimal?)null;
+                decimal? rebateAmount = tdsConfig.TryGetProperty("rebateAmount", out var raProp) && raProp.ValueKind != System.Text.Json.JsonValueKind.Null ? raProp.GetDecimal() : (decimal?)null;
+                DateTime? effectiveDate = null;
+                if (tdsConfig.TryGetProperty("effectiveDate", out var effProp) && effProp.ValueKind == System.Text.Json.JsonValueKind.String)
+                {
+                    if (DateTime.TryParse(effProp.GetString(), out var parsedEff)) effectiveDate = parsedEff;
+                }
                 bool isActive       = !tdsConfig.TryGetProperty("isActive", out var activeProp) || activeProp.GetBoolean();
 
                 using (var connection = new SqlConnection(_connectionString))
@@ -684,24 +709,31 @@ namespace OBMS.WebAPI.Controllers
                     {
                         query = @"UPDATE TDSSlabConfiguration
                                   SET Financial_Year             = @FinancialYear,
+                                      Regime                     = @Regime,
                                       Min_Income                 = @MinIncome,
                                       Max_Income                 = @MaxIncome,
                                       Tax_Rate                   = @TaxRate,
                                       Surcharge_Rate             = @SurchargeRate,
                                       Education_Cess_Rate        = @EducationCessRate,
                                       Higher_Education_Cess_Rate = @HigherEducationCessRate,
+                                      Standard_Deduction         = @StandardDeduction,
+                                      Rebate_Threshold           = @RebateThreshold,
+                                      Rebate_Amount              = @RebateAmount,
+                                      Effective_Date             = @EffectiveDate,
                                       Is_Active                  = @IsActive
                                   WHERE Id = @Id";
                     }
                     else
                     {
                         query = @"INSERT INTO TDSSlabConfiguration
-                                      (Financial_Year, Min_Income, Max_Income, Tax_Rate,
+                                      (Financial_Year, Regime, Min_Income, Max_Income, Tax_Rate,
                                        Surcharge_Rate, Education_Cess_Rate, Higher_Education_Cess_Rate,
+                                       Standard_Deduction, Rebate_Threshold, Rebate_Amount, Effective_Date,
                                        Is_Active, Created_Date)
                                   VALUES
-                                      (@FinancialYear, @MinIncome, @MaxIncome, @TaxRate,
+                                      (@FinancialYear, @Regime, @MinIncome, @MaxIncome, @TaxRate,
                                        @SurchargeRate, @EducationCessRate, @HigherEducationCessRate,
+                                       @StandardDeduction, @RebateThreshold, @RebateAmount, @EffectiveDate,
                                        @IsActive, GETDATE())";
                     }
 
@@ -711,12 +743,17 @@ namespace OBMS.WebAPI.Controllers
                             command.Parameters.AddWithValue("@Id", id);
 
                         command.Parameters.AddWithValue("@FinancialYear", financialYear);
+                        command.Parameters.AddWithValue("@Regime", regime);
                         command.Parameters.AddWithValue("@MinIncome", minIncome);
                         command.Parameters.AddWithValue("@MaxIncome", maxIncome.HasValue ? (object)maxIncome.Value : DBNull.Value);
                         command.Parameters.AddWithValue("@TaxRate", taxRate);
                         command.Parameters.AddWithValue("@SurchargeRate", surchRate);
                         command.Parameters.AddWithValue("@EducationCessRate", eduCess);
                         command.Parameters.AddWithValue("@HigherEducationCessRate", higherCess);
+                        command.Parameters.AddWithValue("@StandardDeduction", stdDeduction.HasValue ? (object)stdDeduction.Value : DBNull.Value);
+                        command.Parameters.AddWithValue("@RebateThreshold", rebateThreshold.HasValue ? (object)rebateThreshold.Value : DBNull.Value);
+                        command.Parameters.AddWithValue("@RebateAmount", rebateAmount.HasValue ? (object)rebateAmount.Value : DBNull.Value);
+                        command.Parameters.AddWithValue("@EffectiveDate", effectiveDate.HasValue ? (object)effectiveDate.Value : DBNull.Value);
                         command.Parameters.AddWithValue("@IsActive", isActive);
 
                         await command.ExecuteNonQueryAsync();
@@ -749,6 +786,87 @@ namespace OBMS.WebAPI.Controllers
             catch (Exception ex)
             {
                 return StatusCode(500, new { message = "Error deleting TDS slab", error = ex.Message });
+            }
+        }
+
+        #endregion
+
+        #region Employee TDS Configuration (per employee / per FY: regime + previous employer)
+
+        // GET: api/statutory/employee-tds-configuration?employeeId=&financialYear=
+        [HttpGet("employee-tds-configuration")]
+        public async Task<IActionResult> GetEmployeeTDSConfiguration([FromQuery] int employeeId, [FromQuery] string? financialYear = null)
+        {
+            try
+            {
+                var q = _context.EmployeeTDSConfigurations.Where(c => c.EmployeeID == employeeId && c.IsActive);
+                if (!string.IsNullOrWhiteSpace(financialYear))
+                    q = q.Where(c => c.FinancialYear == financialYear);
+                var list = await q.OrderByDescending(c => c.FinancialYear).ToListAsync();
+                return Ok(list);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error retrieving employee TDS configuration", error = ex.Message });
+            }
+        }
+
+        // POST: api/statutory/employee-tds-configuration  (upsert by EmployeeID + FinancialYear)
+        [HttpPost("employee-tds-configuration")]
+        public async Task<IActionResult> SaveEmployeeTDSConfiguration([FromBody] EmployeeTDSConfiguration model)
+        {
+            try
+            {
+                if (model == null || model.EmployeeID <= 0 || string.IsNullOrWhiteSpace(model.FinancialYear))
+                    return BadRequest(new { message = "EmployeeID and FinancialYear are required" });
+
+                model.TaxRegime = string.IsNullOrWhiteSpace(model.TaxRegime) ? "New" : model.TaxRegime;
+
+                var existing = await _context.EmployeeTDSConfigurations
+                    .FirstOrDefaultAsync(c => c.EmployeeID == model.EmployeeID
+                                          && c.FinancialYear == model.FinancialYear
+                                          && c.IsActive);
+
+                if (existing == null)
+                {
+                    model.CreatedDate = DateTime.Now;
+                    model.IsActive = true;
+                    _context.EmployeeTDSConfigurations.Add(model);
+                }
+                else
+                {
+                    existing.TaxRegime = model.TaxRegime;
+                    existing.PreviousEmployerIncome = model.PreviousEmployerIncome;
+                    existing.PreviousEmployerTDS = model.PreviousEmployerTDS;
+                    existing.LastUpdatedDate = DateTime.Now;
+                    existing.LastUpdatedBy = model.LastUpdatedBy;
+                }
+
+                await _context.SaveChangesAsync();
+                return Ok(new { message = "Employee TDS configuration saved successfully" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error saving employee TDS configuration", error = ex.Message });
+            }
+        }
+
+        // DELETE: api/statutory/employee-tds-configuration/{id}
+        [HttpDelete("employee-tds-configuration/{id}")]
+        public async Task<IActionResult> DeleteEmployeeTDSConfiguration(int id)
+        {
+            try
+            {
+                var rec = await _context.EmployeeTDSConfigurations.FindAsync(id);
+                if (rec == null) return NotFound(new { message = "Not found" });
+                rec.IsActive = false;
+                rec.LastUpdatedDate = DateTime.Now;
+                await _context.SaveChangesAsync();
+                return Ok(new { message = "Employee TDS configuration deleted" });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Error deleting employee TDS configuration", error = ex.Message });
             }
         }
 

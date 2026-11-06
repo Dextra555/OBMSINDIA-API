@@ -69,6 +69,11 @@ namespace OBMS.WebAPI.Repositories.Interface
         Task<object> GetRBAPayslipData(string loginId, string branch, string period, string employeeType, string employee, string lang);
         #endregion
 
+        #region TDS Computation
+        // Phase 2: standalone TDS computation (same engine as the payslip).
+        Task<OBMS.WebAPI.Services.TDSCalculationResult> GetEmployeeTDSComputationAsync(int employeeId, decimal monthlyGross, DateTime periodDate);
+        #endregion
+
         #region RBI Bank Salary Export
         List<BusinessObjects.RbiBankSalaryExport> GetRbiBankSalaryExportData(string dtSalaryPeriod, string branch, string employeeType, string client = "");
         List<BusinessObjects.RbiBankAdvanceExport> GetRbiBankAdvanceExportData(string dtSalaryPeriod, string branch, string employeeType);

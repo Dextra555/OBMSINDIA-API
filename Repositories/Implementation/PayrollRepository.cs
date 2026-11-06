@@ -3619,6 +3619,64 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
 
 
+        // ── Phase 2: TDS computation helper (joining-date aware, YTD + previous employer) ──
+        // Single source of truth used by all payslip variants so the payslip and the
+        // TDS report APIs use the same calculation service.
+        private async Task<TDSCalculationResult> ComputeEmployeeTDSAsync(
+            int employeeId, decimal grossMonthly, DateTime periodDate,
+            DateTime? joiningDate, DateTime? resignDate)
+        {
+            int fyStart = TdsTaxMath.FinancialYearStart(periodDate);
+            string fyString = $"{fyStart}-{fyStart + 1}";
+
+            // Per-employee / per-FY regime choice + previous employer income & TDS (default New / 0).
+            var cfg = await _oBMSDbContext.EmployeeTDSConfigurations
+                .Where(c => c.EmployeeID == employeeId && c.FinancialYear == fyString && c.IsActive)
+                .FirstOrDefaultAsync();
+
+            string regime = cfg?.TaxRegime ?? "New";
+            decimal prevIncome = cfg?.PreviousEmployerIncome ?? 0m;
+            decimal prevTDS = cfg?.PreviousEmployerTDS ?? 0m;
+
+            // YTD TDS already deducted by THIS employer in the FY, before the current period.
+            var fyStartDate = new DateTime(fyStart, 4, 1);
+            var periodStart = new DateTime(periodDate.Year, periodDate.Month, 1);
+            decimal ytdTDS = await _oBMSDbContext.PaySlips
+                .Where(p => p.EmployeeID == employeeId && p.Period >= fyStartDate && p.Period < periodStart)
+                .SumAsync(p => (decimal?)p.TDS) ?? 0m;
+
+            var input = new TDSComputationInput
+            {
+                GrossMonthlyIncome = grossMonthly,
+                PeriodMonth = periodDate.Month,
+                PeriodYear = periodDate.Year,
+                JoiningDate = joiningDate,
+                ResignDate = resignDate,
+                FinancialYearStart = fyStart,
+                Regime = regime,
+                PreviousEmployerIncome = prevIncome,
+                PreviousEmployerTDS = prevTDS,
+                YtdTDS = ytdTDS,
+                AgeGroup = 1
+            };
+
+            return _tdsCalculationService.CalculateTDS(input);
+        }
+
+        /// <summary>
+        /// Phase 2: standalone annual TDS computation for an employee + period.
+        /// Reuses the same engine as the payslip (single source of truth) and returns
+        /// the full slab-by-slab result for the computation screen / auditor statement.
+        /// </summary>
+        public async Task<TDSCalculationResult> GetEmployeeTDSComputationAsync(int employeeId, decimal monthlyGross, DateTime periodDate)
+        {
+            var emp = await _oBMSDbContext.Employees.FirstOrDefaultAsync(e => e.EMP_ID == employeeId);
+            if (emp == null) return new TDSCalculationResult { IsApplicable = false };
+            var empDetail = await _oBMSDbContext.EmploymentDetails.FirstOrDefaultAsync(d => d.EMPPAY_CODE == emp.EMP_CODE);
+            return await ComputeEmployeeTDSAsync(employeeId, monthlyGross, periodDate,
+                empDetail?.EMPPAY_DATE_JOINED, empDetail?.EMPPAY_DATE_RESIGNED);
+        }
+
         // Payslip Data Methods
 
         public async Task<object> GetPayslipData(string loginId, string branch, string period, string employeeType, string employee, string lang)
@@ -3688,12 +3746,13 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, employeeData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
-                    // TDS: only calculate when TDSApplicable = true for this employee
+                    // TDS: joining-date aware, FY/Regime from DB, YTD + previous employer (Phase 2)
                     decimal monthlyTDS = 0m;
+                    TDSCalculationResult tdsResult = null;
                     if (employeeData.emp.TDSApplicable)
                     {
-                        var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
-                        monthlyTDS = Math.Round(tdsResult.MonthlyTDS, 2);
+                        tdsResult = await ComputeEmployeeTDSAsync(employeeData.emp.EMP_ID, grossSalary, periodDate, employeeData.empDetail.EMPPAY_DATE_JOINED, employeeData.empDetail.EMPPAY_DATE_RESIGNED);
+                        monthlyTDS = tdsResult?.MonthlyTDS ?? 0m;
                     }
 
                     // Calculate actual days in the period month and subtract Absent days (Type = 7)
@@ -3874,12 +3933,13 @@ namespace OBMS.WebAPI.Repositories.Implementation
 
                     var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, guardData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
-                    // TDS: only calculate when TDSApplicable = true
+                    // TDS: joining-date aware, FY/Regime from DB, YTD + previous employer (Phase 2)
                     decimal guard1MonthlyTDS = 0m;
+                    TDSCalculationResult guard1TdsResult = null;
                     if (guardData.emp.TDSApplicable)
                     {
-                        var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
-                        guard1MonthlyTDS = Math.Round(tdsResult.MonthlyTDS, 2);
+                        guard1TdsResult = await ComputeEmployeeTDSAsync(guardData.emp.EMP_ID, grossSalary, periodDate, guardData.empDetail.EMPPAY_DATE_JOINED, guardData.empDetail.EMPPAY_DATE_RESIGNED);
+                        guard1MonthlyTDS = guard1TdsResult?.MonthlyTDS ?? 0m;
                     }
 
                     // Calculate actual days in the period month and subtract Absent days (Type = 7)
@@ -3997,11 +4057,13 @@ namespace OBMS.WebAPI.Repositories.Implementation
                     var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, guardData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
                     // TDS: only calculate when TDSApplicable = true
+                    // TDS: joining-date aware, FY/Regime from DB, YTD + previous employer (Phase 2)
                     decimal guard2MonthlyTDS = 0m;
+                    TDSCalculationResult guard2TdsResult = null;
                     if (guardData.emp.TDSApplicable)
                     {
-                        var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
-                        guard2MonthlyTDS = Math.Round(tdsResult.MonthlyTDS, 2);
+                        guard2TdsResult = await ComputeEmployeeTDSAsync(guardData.emp.EMP_ID, grossSalary, periodDate, guardData.empDetail.EMPPAY_DATE_JOINED, guardData.empDetail.EMPPAY_DATE_RESIGNED);
+                        guard2MonthlyTDS = guard2TdsResult?.MonthlyTDS ?? 0m;
                     }
 
                     // Calculate actual days in the period month and subtract Absent days (Type = 7)
@@ -4122,11 +4184,13 @@ namespace OBMS.WebAPI.Repositories.Implementation
                     var ptResult = _professionalTaxService.CalculateProfessionalTax(grossSalary, rbaData.emp.IndianState ?? "Tamil Nadu", periodDate);
 
                     // TDS: only calculate when TDSApplicable = true for this employee
+                    // TDS: joining-date aware, FY/Regime from DB, YTD + previous employer (Phase 2)
                     decimal monthlyTDS = 0m;
+                    TDSCalculationResult tdsResult = null;
                     if (rbaData.emp.TDSApplicable)
                     {
-                        var tdsResult = _tdsCalculationService.CalculateTDS(grossSalary * 12, 1);
-                        monthlyTDS = Math.Round(tdsResult.MonthlyTDS, 2);
+                        tdsResult = await ComputeEmployeeTDSAsync(rbaData.emp.EMP_ID, grossSalary, periodDate, rbaData.empDetail.EMPPAY_DATE_JOINED, rbaData.empDetail.EMPPAY_DATE_RESIGNED);
+                        monthlyTDS = tdsResult?.MonthlyTDS ?? 0m;
                     }
 
                     // Calculate actual days in the period month and subtract Absent days (Type = 7)
